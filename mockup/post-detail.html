@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>投稿詳細 | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-04</span>モックアップ（表示イメージ確認用・実データではありません）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <div class="back-bar">
+    <a class="icon-btn" href="timeline.html" aria-label="戻る">←</a>
+    <span class="title">投稿</span>
+  </div>
+
+  <!-- 投稿本体（タイムラインと違い、本文は全文表示・日時は絶対表示） -->
+  <div class="detail-post">
+    <div class="detail-head">
+      <a href="profile.html">
+        <span class="avatar" style="background:#f91880">は</span>
+      </a>
+      <div style="flex:1;min-width:0;">
+        <a class="name" href="profile.html" style="font-weight:700;color:var(--color-text);text-decoration:none;">はなこ</a>
+        <div class="text-sub text-sm">@hanako</div>
+      </div>
+      <div class="more-menu">
+        <button class="more-btn" type="button" data-more aria-label="メニュー">⋯</button>
+        <div class="dropdown" data-more-menu>
+          <button type="button" data-open-modal="modal-edit-post">✏️ 編集</button>
+          <button type="button" data-open-modal="modal-delete" data-delete-target="post">🗑 削除</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="detail-text">週末に撮った写真。空の色がきれいに出た。
+思っていたよりもいい時間に居合わせられて、しばらく眺めていました。</p>
+
+    <div class="post-image img-c" style="height:260px;">添付画像（モック）</div>
+
+    <!-- 日時は絶対表示。editedAt があれば「編集済み」を付ける -->
+    <div class="detail-time">2026年8月15日 14:32 ・ <span>編集済み</span></div>
+
+    <!-- 「12 いいね」の独立行（クリックで SC-10 へ） -->
+    <div class="detail-stats">
+      <a href="post-likes.html"><strong data-detail-like-count>25</strong> いいね</a>
+      <span><strong>5</strong> コメント</span>
+    </div>
+
+    <!-- アクション行はコメントといいねの2つだけ -->
+    <div class="detail-actions">
+      <a class="action-btn action-comment" href="#comment-input">
+        <span class="ico">💬</span><span>5</span>
+      </a>
+      <button class="action-btn action-like is-liked" type="button" data-like aria-label="いいね">
+        <span class="ico">♥</span><span data-like-count>25</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- コメント投稿欄（常時表示） -->
+  <div class="comment-form">
+    <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+    <div class="grow">
+      <textarea class="textarea" id="comment-input" rows="2" placeholder="コメントを入力..."></textarea>
+      <div class="comment-form-foot">
+        <span class="char-counter" id="comment-counter">0/280</span>
+        <button class="btn btn-accent btn-sm" type="button" id="comment-submit" disabled>送信</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- コメント一覧: 古い順（昇順）。タイムラインの新着順とは逆 -->
+  <div class="section-bar">コメント（古い順）</div>
+  <div id="comment-list"></div>
+
+  <div class="list-foot">これ以上コメントはありません</div>
+
+</main>
+
+<!-- MD-03 削除確認モーダル -->
+<div class="modal-backdrop" id="modal-delete">
+  <div class="modal modal-sm">
+    <div class="confirm-body">
+      <h3 data-delete-title>投稿を削除しますか？</h3>
+      <p>この操作は取り消せません。</p>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn btn-outline" type="button" data-close-modal>キャンセル</button>
+      <button class="btn btn-danger" type="button" id="confirm-delete">削除</button>
+    </div>
+  </div>
+</div>
+
+<!-- MD-02 投稿編集モーダル（Phase2） -->
+<div class="modal-backdrop" id="modal-edit-post">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" type="button" data-close-modal aria-label="閉じる">×</button>
+      <button class="btn btn-accent btn-sm" type="button" id="edit-save">保存</button>
+    </div>
+    <div class="modal-body">
+      <div class="compose">
+        <span class="avatar" style="background:#f91880">は</span>
+        <textarea id="edit-text">週末に撮った写真。空の色がきれいに出た。
+思っていたよりもいい時間に居合わせられて、しばらく眺めていました。</textarea>
+      </div>
+      <!-- 画像の差し替えは不可（既存画像はプレビュー表示のみ） -->
+      <div class="image-preview img-c" style="height:150px;">既存の画像（変更できません）</div>
+    </div>
+    <div class="modal-foot">
+      <span class="text-sub text-sm">保存すると「編集済み」が付きます</span>
+      <span class="char-counter" id="edit-counter">0/280</span>
+    </div>
+  </div>
+</div>
+
+<script src="mock.js"></script>
+<script>
+  // コメントは古い順に並べる
+  document.getElementById('comment-list').innerHTML = COMMENTS.map(commentHtml).join('');
+
+  bindCharCounter(
+    document.getElementById('comment-input'),
+    document.getElementById('comment-counter'),
+    document.getElementById('comment-submit'),
+    280
+  );
+
+  // コメント送信 → 一覧の末尾に即座に追加し、コメント数を +1
+  document.getElementById('comment-submit').addEventListener('click', () => {
+    const ta = document.getElementById('comment-input');
+    const body = ta.value.trim();
+    if (!body) return;
+
+    const c = { id: 900, authorId: 1, body: body, createdAt: new Date().toISOString(), isMine: true };
+    document.getElementById('comment-list').insertAdjacentHTML('beforeend', commentHtml(c));
+
+    ta.value = '';
+    ta.dispatchEvent(new Event('input'));
+
+    // コメント数の表示を追従させる
+    document.querySelectorAll('.action-comment span:last-child').forEach(el => {
+      el.textContent = (parseInt(el.textContent, 10) || 0) + 1;
+    });
+
+    showToast('コメントを投稿しました');
+  });
+
+  bindCharCounter(document.getElementById('edit-text'), document.getElementById('edit-counter'), null, 280);
+
+  document.getElementById('edit-save').addEventListener('click', () => {
+    closeAllModals();
+    showToast('投稿を編集しました');
+  });
+
+  // 投稿詳細からの削除は、削除後タイムラインへ遷移する
+  document.getElementById('confirm-delete').addEventListener('click', () => {
+    closeAllModals();
+    showToast('投稿を削除しました');
+    setTimeout(() => location.href = 'timeline.html', 800);
+  });
+</script>
+</body>
+</html>

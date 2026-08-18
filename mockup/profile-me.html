@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィール（自分） | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-05</span>モックアップ（自分のプロフィール／<code style="background:rgba(255,255,255,.2);padding:0 4px;border-radius:3px;">isMe: true</code>）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <div class="back-bar">
+    <a class="icon-btn" href="timeline.html" aria-label="戻る">←</a>
+    <div>
+      <div class="title">たろう</div>
+      <div class="sub" data-post-count>5 件の投稿</div>
+    </div>
+  </div>
+
+  <div class="profile-cover" style="background:linear-gradient(120deg,#1d9bf0,#00cec9);"></div>
+
+  <div class="profile-head">
+    <div class="profile-top">
+      <span class="avatar avatar-lg" style="background:#1d9bf0">た</span>
+      <!-- 自分の場合は「プロフィールを編集」（isMe: true） -->
+      <a class="btn btn-outline" href="profile-edit.html">プロフィールを編集</a>
+    </div>
+
+    <h1 class="profile-name">たろう</h1>
+    <div class="profile-handle">@taro_123</div>
+
+    <p class="profile-bio">学習目的でSNSアプリを作っています。</p>
+
+    <div class="profile-meta">
+      <span>📅</span><span>2026年8月からご利用</span>
+    </div>
+
+    <div class="profile-counts">
+      <a href="following.html"><strong>12</strong> フォロー中</a>
+      <a href="followers.html"><strong data-follower-count>34</strong> フォロワー</a>
+    </div>
+  </div>
+
+  <div class="section-bar" data-post-section>投稿　5件</div>
+
+  <div id="post-list"></div>
+
+  <div class="list-foot">これ以上投稿はありません</div>
+
+</main>
+
+<!-- FAB（自分のプロフィールにも表示する） -->
+<button class="fab" type="button" data-open-modal="modal-compose">
+  <span>✏️</span><span class="fab-label">投稿する</span>
+</button>
+
+<!-- MD-01 投稿作成モーダル -->
+<div class="modal-backdrop" id="modal-compose">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" type="button" data-close-modal aria-label="閉じる">×</button>
+      <button class="btn btn-accent btn-sm" type="button" id="compose-submit">投稿</button>
+    </div>
+    <div class="modal-body">
+      <div class="compose">
+        <span class="avatar" style="background:#1d9bf0">た</span>
+        <textarea id="compose-text" placeholder="いまどうしてる？"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline btn-sm" type="button">🖼 画像</button>
+      <span class="char-counter" id="compose-counter">0/280</span>
+    </div>
+  </div>
+</div>
+
+<!-- MD-03 削除確認モーダル -->
+<div class="modal-backdrop" id="modal-delete">
+  <div class="modal modal-sm">
+    <div class="confirm-body">
+      <h3 data-delete-title>投稿を削除しますか？</h3>
+      <p>この操作は取り消せません。</p>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn btn-outline" type="button" data-close-modal>キャンセル</button>
+      <button class="btn btn-danger" type="button" id="confirm-delete">削除</button>
+    </div>
+  </div>
+</div>
+
+<!-- MD-02 投稿編集モーダル -->
+<div class="modal-backdrop" id="modal-edit-post">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" type="button" data-close-modal aria-label="閉じる">×</button>
+      <button class="btn btn-accent btn-sm" type="button" data-close-modal>保存</button>
+    </div>
+    <div class="modal-body">
+      <div class="compose">
+        <span class="avatar" style="background:#1d9bf0">た</span>
+        <textarea id="edit-text">カーソルページネーションの実装、同じ時刻の投稿が2件あると取りこぼすことに気づいた。主キーをタイブレーカーに入れて解決。</textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span class="text-sub text-sm">保存すると「編集済み」が付きます</span>
+      <span class="char-counter" id="edit-counter">0/280</span>
+    </div>
+  </div>
+</div>
+
+<script src="mock.js"></script>
+<script>
+  // 自分の投稿なので、各カードに [⋯] メニュー（編集・削除）が出る
+  const myPosts = POSTS.filter(p => p.author.id === CURRENT_USER_ID);
+  document.getElementById('post-list').innerHTML = myPosts.map(p => postCardHtml(p)).join('');
+
+  // 表示件数を実データに合わせる
+  document.querySelector('[data-post-count]').textContent = `${myPosts.length} 件の投稿`;
+  document.querySelector('[data-post-section]').textContent = `投稿　${myPosts.length}件`;
+
+  bindCharCounter(
+    document.getElementById('compose-text'),
+    document.getElementById('compose-counter'),
+    document.getElementById('compose-submit'), 280
+  );
+  bindCharCounter(document.getElementById('edit-text'), document.getElementById('edit-counter'), null, 280);
+
+  document.getElementById('compose-submit').addEventListener('click', () => {
+    closeAllModals();
+    showToast('投稿しました');
+  });
+  document.getElementById('confirm-delete').addEventListener('click', () => {
+    closeAllModals();
+    showToast('投稿を削除しました');
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィール編集 | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-06</span>モックアップ（表示イメージ確認用・実データではありません）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <div class="back-bar">
+    <a class="icon-btn" href="profile-me.html" aria-label="戻る">←</a>
+    <span class="title">プロフィールを編集</span>
+    <span style="flex:1"></span>
+    <!-- 変更がない場合は保存ボタンを無効化する（docs SC-06） -->
+    <button class="btn btn-primary btn-sm is-disabled" type="button" id="save-btn" disabled>保存</button>
+  </div>
+
+  <div style="padding:20px 16px;">
+
+    <!-- プロフィール画像（Phase2） -->
+    <div class="form-field">
+      <label>プロフィール画像　<span class="text-sub text-sm" style="font-weight:600;">（Phase2）</span></label>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <span class="avatar avatar-lg" style="background:#1d9bf0;border:none;">た</span>
+        <div>
+          <button class="btn btn-outline btn-sm" type="button">画像を変更</button>
+          <div class="field-hint">JPEG / PNG / WebP、5MBまで。円形にトリミングされます</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-field">
+      <label class="required" for="displayName">表示名</label>
+      <input class="input" type="text" id="displayName" value="たろう" maxlength="50">
+      <div class="field-hint">1〜50文字</div>
+    </div>
+
+    <div class="form-field">
+      <label for="bio">自己紹介</label>
+      <textarea class="textarea" id="bio" rows="4" maxlength="200">学習目的でSNSアプリを作っています。</textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <span class="field-hint" style="margin:0;">改行が使えます</span>
+        <span class="char-counter" id="bio-counter">0/160</span>
+      </div>
+    </div>
+
+    <div class="divider-thick" style="margin:24px -16px;"></div>
+
+    <!-- メールアドレスとユーザー名は本画面では変更できない -->
+    <div class="form-field">
+      <label for="username">ユーザー名</label>
+      <input class="input" type="text" id="username" value="@taro_123" disabled>
+      <div class="field-hint">ユーザー名は変更できません</div>
+    </div>
+
+    <div class="form-field">
+      <label for="email">メールアドレス</label>
+      <input class="input" type="email" id="email" value="taro@example.com" disabled>
+      <div class="field-hint">メールアドレスは変更できません</div>
+    </div>
+
+    <div style="margin-top:28px;padding-top:18px;border-top:1px solid var(--color-border);">
+      <a href="account.html">アカウント設定（パスワード変更）→</a>
+    </div>
+
+  </div>
+
+</main>
+
+<script src="mock.js"></script>
+<script>
+  const nameInput = document.getElementById('displayName');
+  const bioInput = document.getElementById('bio');
+  const saveBtn = document.getElementById('save-btn');
+  const counter = document.getElementById('bio-counter');
+
+  const ORIGINAL = { name: nameInput.value, bio: bioInput.value };
+
+  function update() {
+    const len = [...bioInput.value].length;
+    counter.textContent = `${len}/160`;
+    counter.classList.toggle('is-warn', len > 140 && len <= 160);
+    counter.classList.toggle('is-over', len > 160);
+
+    // 変更がなければ保存できない。表示名が空、または自己紹介が超過でも保存できない
+    const changed = nameInput.value !== ORIGINAL.name || bioInput.value !== ORIGINAL.bio;
+    const valid = nameInput.value.trim().length > 0 && len <= 160;
+    const enabled = changed && valid;
+
+    saveBtn.disabled = !enabled;
+    saveBtn.classList.toggle('is-disabled', !enabled);
+  }
+
+  nameInput.addEventListener('input', update);
+  bioInput.addEventListener('input', update);
+  update();
+
+  saveBtn.addEventListener('click', () => {
+    showToast('プロフィールを更新しました');
+    setTimeout(() => location.href = 'profile-me.html', 800);
+  });
+
+  // 未保存の変更がある状態で離脱しようとしたら確認する
+  window.addEventListener('beforeunload', (e) => {
+    if (!saveBtn.disabled) { e.preventDefault(); e.returnValue = ''; }
+  });
+</script>
+</body>
+</html>

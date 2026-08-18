@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ユーザー検索 | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-07</span>モックアップ（Phase2 / 表示イメージ確認用）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <div class="back-bar">
+    <a class="icon-btn" href="timeline.html" aria-label="戻る">←</a>
+    <span class="title">ユーザーを検索</span>
+  </div>
+
+  <div style="padding:14px 16px;border-bottom:1px solid var(--color-border);">
+    <input class="input" type="search" id="q" placeholder="ユーザー名または表示名で検索" autocomplete="off">
+    <div class="field-hint">
+      ユーザー名（@taro_123）と表示名（たろう）を検索します。自己紹介とメールアドレスは検索対象外です
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <!-- SC-07 だけオフセット方式のページネーション（他の一覧は無限スクロール） -->
+  <div class="pagination" id="pager" style="display:none;">
+    <span class="disabled">前へ</span>
+    <span class="current">1</span>
+    <a href="#">2</a>
+    <a href="#">3</a>
+    <a href="#">次へ</a>
+  </div>
+
+  <div class="note-box">
+    <strong>設計上のポイント</strong><br>
+    この画面は<strong>唯一オフセット方式</strong>のページネーションを使います（他の一覧はカーソル方式）。
+    検索結果は並びが安定しており、ページ番号で移動できるほうが自然なためです。<br>
+    入力後は<code>300ms</code>のデバウンスを挟んで検索します。<strong>未入力ではAPIを呼びません</strong>。
+  </div>
+
+</main>
+
+<script src="mock.js"></script>
+<script>
+  const q = document.getElementById('q');
+  const result = document.getElementById('result');
+  const pager = document.getElementById('pager');
+  let timer = null;
+
+  // 未入力（初期状態）: 検索を促すメッセージ。APIは呼ばない
+  function renderInitial() {
+    pager.style.display = 'none';
+    result.innerHTML = `
+      <div class="state-block">
+        <div class="state-icon">🔍</div>
+        <h3>ユーザーを検索しましょう</h3>
+        <p>ユーザー名や表示名を入力すると、<br>該当するユーザーが表示されます。</p>
+      </div>`;
+  }
+
+  function renderLoading() {
+    pager.style.display = 'none';
+    result.innerHTML = Array(3).fill(`
+      <div class="skeleton-card">
+        <div class="sk sk-avatar"></div>
+        <div style="flex:1">
+          <div class="sk sk-line sk-w-30"></div>
+          <div class="sk sk-line sk-w-60"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderResult(keyword) {
+    // 自分自身は検索結果に出さない。前方一致で絞り込む
+    const kw = keyword.toLowerCase();
+    const hits = USERS.filter(u =>
+      !u.isMe && (u.username.toLowerCase().startsWith(kw) || u.displayName.startsWith(keyword))
+    );
+
+    if (hits.length === 0) {
+      pager.style.display = 'none';
+      result.innerHTML = `
+        <div class="state-block">
+          <div class="state-icon">🫥</div>
+          <h3>「${escapeHtml(keyword)}」に一致するユーザーは見つかりませんでした</h3>
+          <p>ユーザー名の綴りを確認するか、<br>別のキーワードで検索してみてください。</p>
+        </div>`;
+      return;
+    }
+
+    result.innerHTML = hits.map(userRowHtml).join('');
+    pager.style.display = hits.length >= 3 ? 'flex' : 'none';
+  }
+
+  q.addEventListener('input', () => {
+    clearTimeout(timer);
+    const v = q.value.trim();
+
+    if (!v) { renderInitial(); return; }
+
+    // 入力中（デバウンス待ち）は前回の結果を維持してちらつきを防ぐ
+    timer = setTimeout(() => {
+      renderLoading();
+      setTimeout(() => renderResult(v), 350);
+    }, 300);
+  });
+
+  renderInitial();
+</script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>いいねしたユーザー | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-10</span>モックアップ（Phase2 / 表示イメージ確認用）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <div class="back-bar">
+    <a class="icon-btn" href="post-detail.html" aria-label="戻る">←</a>
+    <span class="title">いいねしたユーザー</span>
+  </div>
+
+  <!-- いいねした新しい順に並べる -->
+  <div id="user-list"></div>
+
+  <div class="list-foot">これ以上ユーザーはいません</div>
+
+</main>
+
+<script src="mock.js"></script>
+<script>
+  const list = USERS.filter(u => !u.isMe);
+  document.getElementById('user-list').innerHTML = list.map(userRowHtml).join('');
+</script>
+</body>
+</html>

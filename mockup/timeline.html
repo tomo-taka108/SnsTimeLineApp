@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>タイムライン | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-03</span>モックアップ（表示イメージ確認用・実データではありません）</div>
+
+<!-- 共通ヘッダー（固定） -->
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索（SC-07）">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- タブ。状態はURLクエリ ?tab= で表現する（docs SC-03） -->
+  <div class="tabs">
+    <button class="tab is-active" type="button" data-tab="all"><span class="tab-label">すべて</span></button>
+    <button class="tab" type="button" data-tab="following"><span class="tab-label">フォロー中</span></button>
+  </div>
+
+  <div id="post-list"></div>
+
+  <!-- 無限スクロールのフッタ -->
+  <div class="list-foot" id="list-foot">
+    <span class="spinner"></span>
+  </div>
+
+</main>
+
+<!-- FAB（投稿ボタン） -->
+<button class="fab" type="button" data-open-modal="modal-compose">
+  <span>✏️</span><span class="fab-label">投稿する</span>
+</button>
+
+<!-- ===== MD-01 投稿作成モーダル ===== -->
+<div class="modal-backdrop" id="modal-compose">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" type="button" data-close-modal aria-label="閉じる">×</button>
+      <button class="btn btn-accent btn-sm" type="button" id="compose-submit">投稿</button>
+    </div>
+    <div class="modal-body">
+      <div class="compose">
+        <span class="avatar" style="background:#1d9bf0">た</span>
+        <textarea id="compose-text" placeholder="いまどうしてる？"></textarea>
+      </div>
+      <div class="image-preview img-a" id="compose-preview" style="display:none;">
+        添付画像のプレビュー（モック）
+        <button class="remove-image" type="button" id="remove-image" aria-label="画像を削除">×</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline btn-sm" type="button" id="add-image">🖼 画像</button>
+      <span class="char-counter" id="compose-counter">0/280</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MD-03 削除確認モーダル ===== -->
+<div class="modal-backdrop" id="modal-delete">
+  <div class="modal modal-sm">
+    <div class="confirm-body">
+      <h3 data-delete-title>投稿を削除しますか？</h3>
+      <p>この操作は取り消せません。</p>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn btn-outline" type="button" data-close-modal>キャンセル</button>
+      <button class="btn btn-danger" type="button" id="confirm-delete">削除</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MD-02 投稿編集モーダル（Phase2） ===== -->
+<div class="modal-backdrop" id="modal-edit-post">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" type="button" data-close-modal aria-label="閉じる">×</button>
+      <button class="btn btn-accent btn-sm" type="button" data-close-modal>保存</button>
+    </div>
+    <div class="modal-body">
+      <div class="compose">
+        <span class="avatar" style="background:#1d9bf0">た</span>
+        <textarea id="edit-text">今日はいい天気でした。散歩がてら近所の公園まで歩いたら、思ったより人が多くてびっくりしました。</textarea>
+      </div>
+      <div class="field-hint">※ 画像の差し替えはできません（本文のみ編集可）</div>
+    </div>
+    <div class="modal-foot">
+      <span class="text-sub text-sm">保存すると「編集済み」が付きます</span>
+      <span class="char-counter" id="edit-counter">0/280</span>
+    </div>
+  </div>
+</div>
+
+<script src="mock.js"></script>
+<script>
+  const listEl = document.getElementById('post-list');
+  const footEl = document.getElementById('list-foot');
+
+  let currentTab = new URLSearchParams(location.search).get('tab') || 'all';
+  let shown = 0;
+  let loading = false;
+  const PAGE_SIZE = 10;
+
+  function currentPosts() {
+    // 「フォロー中」は自分＋フォロー中ユーザーの投稿のみ（F-TL-02）
+    if (currentTab === 'following') {
+      const ids = USERS.filter(u => u.isFollowing || u.isMe).map(u => u.id);
+      return POSTS.filter(p => ids.includes(p.author.id));
+    }
+    return POSTS;
+  }
+
+  function renderNextPage() {
+    const posts = currentPosts();
+    const next = posts.slice(shown, shown + PAGE_SIZE);
+    listEl.insertAdjacentHTML('beforeend', next.map(p => postCardHtml(p)).join(''));
+    shown += next.length;
+
+    if (shown >= posts.length) {
+      // 全件到達（hasNext: false）
+      footEl.innerHTML = 'これ以上投稿はありません';
+    } else {
+      footEl.innerHTML = '<span class="spinner"></span>';
+    }
+  }
+
+  function resetList() {
+    // タブ切替時はリストをリセットして先頭から取得し直す（カーソルも破棄）
+    listEl.innerHTML = '';
+    shown = 0;
+
+    const posts = currentPosts();
+    if (posts.length === 0) {
+      footEl.innerHTML = '';
+      listEl.innerHTML = `
+        <div class="state-block">
+          <div class="state-icon">👀</div>
+          <h3>まだ投稿がありません</h3>
+          <p>フォロー中のユーザーの投稿がここに表示されます。<br>気になるユーザーをフォローしてみましょう。</p>
+          <a class="btn btn-accent" href="search.html">ユーザーを探す</a>
+        </div>`;
+      return;
+    }
+    renderNextPage();
+  }
+
+  // タブ切替（URLクエリに反映する）
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      currentTab = btn.dataset.tab;
+
+      const url = new URL(location.href);
+      url.searchParams.set('tab', currentTab);
+      history.replaceState(null, '', url);
+
+      resetList();
+      window.scrollTo({ top: 0 });
+    });
+  });
+
+  // 起動時にURLのタブを反映
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    b.classList.toggle('is-active', b.dataset.tab === currentTab);
+  });
+
+  // 無限スクロール（下端200px手前で次を読み込む）
+  window.addEventListener('scroll', () => {
+    if (loading) return;
+    if (shown >= currentPosts().length) return;
+
+    const remain = document.body.offsetHeight - (window.innerHeight + window.scrollY);
+    if (remain < 200) {
+      loading = true;
+      // 読み込みの間があることを見せるため、あえて少し待つ
+      setTimeout(() => { renderNextPage(); loading = false; }, 450);
+    }
+  });
+
+  // 投稿モーダルの文字数カウンタ
+  bindCharCounter(
+    document.getElementById('compose-text'),
+    document.getElementById('compose-counter'),
+    document.getElementById('compose-submit'),
+    280
+  );
+  bindCharCounter(document.getElementById('edit-text'), document.getElementById('edit-counter'), null, 280);
+
+  // 画像添付（モックなのでプレビューの表示だけ）
+  document.getElementById('add-image').addEventListener('click', () => {
+    document.getElementById('compose-preview').style.display = 'flex';
+  });
+  document.getElementById('remove-image').addEventListener('click', () => {
+    document.getElementById('compose-preview').style.display = 'none';
+  });
+
+  // 投稿する → タイムライン先頭に即座に挿入し、トーストを出す
+  document.getElementById('compose-submit').addEventListener('click', () => {
+    const ta = document.getElementById('compose-text');
+    const body = ta.value.trim();
+    if (!body) return;
+
+    const me = USERS[0];
+    const newPost = {
+      id: 999,
+      author: { id: me.id, username: me.username, displayName: me.displayName, avatarUrl: null, color: me.color },
+      body: body,
+      images: document.getElementById('compose-preview').style.display === 'flex'
+        ? [{ fileId: 99, cls: 'img-a', width: 1200, height: 800 }] : [],
+      likeCount: 0, commentCount: 0, isLikedByMe: false,
+      createdAt: new Date().toISOString(), editedAt: null,
+    };
+
+    listEl.insertAdjacentHTML('afterbegin', postCardHtml(newPost));
+    ta.value = '';
+    ta.dispatchEvent(new Event('input'));
+    document.getElementById('compose-preview').style.display = 'none';
+    closeAllModals();
+    showToast('投稿しました');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // 削除の確定 → リストから該当カードを除去
+  document.getElementById('confirm-delete').addEventListener('click', () => {
+    closeAllModals();
+    showToast('投稿を削除しました');
+  });
+
+  resetList();
+</script>
+</body>
+</html>
