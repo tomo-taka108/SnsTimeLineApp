@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ページが見つかりません | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-12</span>モックアップ（3パターンの文言を並べて表示しています）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- ① 未定義のURL -->
+  <div class="state-block">
+    <div class="state-icon">🧭</div>
+    <h3>お探しのページは見つかりませんでした</h3>
+    <p>URLが間違っているか、ページが移動した可能性があります。</p>
+    <a class="btn btn-accent" href="timeline.html">タイムラインへ戻る</a>
+  </div>
+
+  <div class="divider-thick"></div>
+
+  <!-- ② 投稿が404 -->
+  <div class="state-block">
+    <div class="state-icon">📄</div>
+    <h3>この投稿は存在しないか、削除されました</h3>
+    <p>投稿が削除された場合、リンクを開いてもこの表示になります。</p>
+    <a class="btn btn-accent" href="timeline.html">タイムラインへ戻る</a>
+  </div>
+
+  <div class="divider-thick"></div>
+
+  <!-- ③ ユーザーが404 -->
+  <div class="state-block">
+    <div class="state-icon">👤</div>
+    <h3>このユーザーは存在しません</h3>
+    <p>ユーザー名が変更されたか、アカウントが削除された可能性があります。</p>
+    <a class="btn btn-accent" href="timeline.html">タイムラインへ戻る</a>
+  </div>
+
+  <div class="note-box">
+    <strong>モック補足</strong><br>
+    実際は<strong>1画面で、遷移元に応じて文言だけが切り替わります</strong>。
+    ここでは3パターンを並べて比較できるようにしています。<br>
+    論理削除済みのリソースには <code>404</code> を返します（<code>410 Gone</code> は使いません。存在の有無を漏らさないため）。
+  </div>
+
+</main>
+
+<script src="mock.js"></script>
+</body>
+</html>

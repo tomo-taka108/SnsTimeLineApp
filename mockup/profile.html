@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィール（他ユーザー） | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-05</span>モックアップ（他ユーザーのプロフィール／<code style="background:rgba(255,255,255,.2);padding:0 4px;border-radius:3px;">isMe: false</code>）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <div class="back-bar">
+    <a class="icon-btn" href="timeline.html" aria-label="戻る">←</a>
+    <div>
+      <div class="title">はなこ</div>
+      <div class="sub" data-post-count>4 件の投稿</div>
+    </div>
+  </div>
+
+  <div class="profile-cover"></div>
+
+  <div class="profile-head">
+    <div class="profile-top">
+      <span class="avatar avatar-lg" style="background:#f91880">は</span>
+      <!-- 他人の場合はフォローボタン（isMe: false） -->
+      <button class="btn btn-outline btn-following" type="button" data-follow data-following="true">
+        <span class="label-following">フォロー中</span>
+        <span class="label-unfollow">フォロー解除</span>
+      </button>
+    </div>
+
+    <h1 class="profile-name">はなこ</h1>
+    <div class="profile-handle">@hanako</div>
+
+    <p class="profile-bio">カフェ巡りと写真が好きです。週末はだいたい出かけています。</p>
+
+    <div class="profile-meta">
+      <span>📅</span><span>2026年6月からご利用</span>
+    </div>
+
+    <div class="profile-counts">
+      <a href="following.html"><strong>40</strong> フォロー中</a>
+      <a href="followers.html"><strong data-follower-count>96</strong> フォロワー</a>
+    </div>
+  </div>
+
+  <div class="section-bar" data-post-section>投稿　4件</div>
+
+  <div id="post-list"></div>
+
+  <div class="list-foot"><span class="spinner"></span></div>
+
+</main>
+
+<script src="mock.js"></script>
+<script>
+  // このユーザー（id:2 はなこ）の投稿のみ表示。他人なので [⋯] メニューは出ない
+  const posts = POSTS.filter(p => p.author.id === 2);
+  document.getElementById('post-list').innerHTML = posts.map(p => postCardHtml(p)).join('');
+  document.querySelector('.list-foot').textContent = 'これ以上投稿はありません';
+
+  // 表示件数を実データに合わせる
+  document.querySelector('[data-post-count]').textContent = `${posts.length} 件の投稿`;
+  document.querySelector('[data-post-section]').textContent = `投稿　${posts.length}件`;
+</script>
+</body>
+</html>

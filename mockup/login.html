@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ログイン | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner"><span class="screen-id">SC-01</span>モックアップ（表示イメージ確認用・実データではありません）</div>
+
+<!-- 未ログイン画面はヘッダーを表示せず、中央にフォームのみ（docs 4.1） -->
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="brand">◉</div>
+    <h1>ログイン</h1>
+    <p class="lead">SnsTimeLineApp</p>
+
+    <!-- 認証失敗（401）はフォーム上部にまとめて表示。
+         どちらが間違っているかは示さない（アカウント存在の推測を防ぐ） -->
+    <div class="form-alert">
+      <span>⚠️</span>
+      <span>メールアドレスまたはパスワードが正しくありません</span>
+    </div>
+
+    <form onsubmit="event.preventDefault(); location.href='timeline.html';">
+      <div class="form-field">
+        <label class="required" for="email">メールアドレス</label>
+        <input class="input" type="email" id="email" value="taro@example.com" placeholder="you@example.com">
+      </div>
+
+      <div class="form-field">
+        <label class="required" for="password">パスワード</label>
+        <input class="input" type="password" id="password" value="Password1" placeholder="パスワードを入力">
+      </div>
+
+      <button class="btn btn-accent btn-block" type="submit">ログイン</button>
+    </form>
+
+    <div class="auth-footer">
+      アカウントをお持ちでない方は<br>
+      <a href="signup.html">→ 新規登録</a>
+    </div>
+  </div>
+</div>
+
+<div class="note-box" style="max-width:420px;margin:0 auto 40px;">
+  <strong>モック補足</strong><br>
+  上のエラー表示は<strong>401の見た目を確認するために常時表示</strong>しています。
+  実装では認証失敗時のみ表示します。<br>
+  バリデーションエラー（400）は<code>該当フィールドの直下</code>に赤字で出す方針です（<a href="signup.html">SC-02</a> で確認できます）。
+</div>
+
+<script src="mock.js"></script>
+</body>
+</html>

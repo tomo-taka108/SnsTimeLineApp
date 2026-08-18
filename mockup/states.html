@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4状態カタログ | SnsTimeLineApp モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div class="mock-banner">ローディング / 空 / エラー の状態カタログ（docs/03_screen_design.md 8章）</div>
+
+<header class="app-header">
+  <a class="logo" href="timeline.html"><span class="logo-mark">◉</span>SnsTimeLine</a>
+  <div class="header-actions">
+    <a class="icon-btn" href="search.html" title="ユーザー検索">🔍</a>
+    <div class="avatar-menu">
+      <button class="avatar-menu-trigger" type="button" data-menu-trigger>
+        <span class="avatar avatar-sm" style="background:#1d9bf0">た</span>
+        <span class="caret">▼</span>
+      </button>
+      <div class="dropdown" data-menu>
+        <a href="profile-me.html">👤 プロフィール</a>
+        <a href="profile-edit.html">⚙️ 設定</a>
+        <div class="divider"></div>
+        <a href="login.html">🚪 ログアウト</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <h1 class="page-heading">4状態カタログ</h1>
+
+  <div class="note-box">
+    すべての一覧・詳細画面は<strong>ローディング / 空 / エラー / 正常</strong>の4状態を必ず設計します。
+    ローディングは<strong>スピナーではなくスケルトン</strong>を使い、レイアウトシフトを防ぎます。
+    空状態は「データがありません」で終わらせず、<strong>次に取るべき行動を提示</strong>します。
+  </div>
+
+  <!-- ① ローディング（スケルトン3件） -->
+  <div class="section-bar">① ローディング — スケルトン（投稿カード3件）</div>
+  <div class="skeleton-card">
+    <div class="sk sk-avatar"></div>
+    <div style="flex:1">
+      <div class="sk sk-line sk-w-30"></div>
+      <div class="sk sk-line sk-w-100"></div>
+      <div class="sk sk-line sk-w-60"></div>
+    </div>
+  </div>
+  <div class="skeleton-card">
+    <div class="sk sk-avatar"></div>
+    <div style="flex:1">
+      <div class="sk sk-line sk-w-30"></div>
+      <div class="sk sk-line sk-w-90"></div>
+      <div class="sk sk-img"></div>
+    </div>
+  </div>
+  <div class="skeleton-card">
+    <div class="sk sk-avatar"></div>
+    <div style="flex:1">
+      <div class="sk sk-line sk-w-30"></div>
+      <div class="sk sk-line sk-w-100"></div>
+      <div class="sk sk-line sk-w-60"></div>
+    </div>
+  </div>
+
+  <!-- ② 空状態 -->
+  <div class="section-bar">② 空状態 — 全体タイムライン</div>
+  <div class="state-block">
+    <div class="state-icon">✏️</div>
+    <h3>まだ投稿がありません</h3>
+    <p>最初の投稿をしてみましょう。</p>
+    <a class="btn btn-accent" href="timeline.html">投稿する</a>
+  </div>
+
+  <div class="section-bar">② 空状態 — フォロー中タイムライン</div>
+  <div class="state-block">
+    <div class="state-icon">👀</div>
+    <h3>フォロー中のユーザーの投稿がありません</h3>
+    <p>フォロー中のユーザーの投稿がここに表示されます。<br>気になるユーザーをフォローしてみましょう。</p>
+    <a class="btn btn-accent" href="search.html">ユーザーを探す</a>
+  </div>
+
+  <div class="section-bar">② 空状態 — コメント</div>
+  <div class="state-block">
+    <div class="state-icon">💬</div>
+    <h3>まだコメントはありません</h3>
+    <p>最初のコメントを書いてみましょう。</p>
+  </div>
+
+  <div class="section-bar">② 空状態 — フォロー中 / フォロワー一覧</div>
+  <div class="state-block">
+    <div class="state-icon">🫂</div>
+    <h3>まだ誰もフォローしていません</h3>
+    <p>気になるユーザーを見つけてフォローすると、<br>ここに表示されます。</p>
+    <a class="btn btn-accent" href="search.html">ユーザーを探す</a>
+  </div>
+
+  <!-- ③ エラー -->
+  <div class="section-bar">③ エラー — 一覧の取得失敗（トーストにしない）</div>
+  <div class="state-error">
+    <p>タイムラインの取得に失敗しました</p>
+    <button class="btn btn-outline btn-sm" type="button">再試行</button>
+  </div>
+
+  <div class="section-bar">③ エラー — 追加読み込みの失敗</div>
+  <div class="state-error">
+    <p>読み込みに失敗しました</p>
+    <button class="btn btn-outline btn-sm" type="button">再試行</button>
+  </div>
+
+  <div class="section-bar">③ エラー — フォームのバリデーション（フィールド直下）</div>
+  <div style="padding:16px;">
+    <div class="form-field">
+      <label class="required">本文</label>
+      <textarea class="textarea is-error" rows="2">（281文字を超えた本文）</textarea>
+      <div class="field-error"><span>⚠️</span><span>本文は280文字以内で入力してください</span></div>
+    </div>
+  </div>
+
+  <div class="section-bar">③ エラー — 認証失敗（フォーム上部にまとめて表示）</div>
+  <div style="padding:16px;">
+    <div class="form-alert">
+      <span>⚠️</span><span>メールアドレスまたはパスワードが正しくありません</span>
+    </div>
+  </div>
+
+  <!-- ④ トースト -->
+  <div class="section-bar">④ トースト — 画面下部に表示し3秒で自動消滅</div>
+  <div style="padding:16px;display:flex;flex-wrap:wrap;gap:8px;">
+    <button class="btn btn-outline btn-sm" type="button" onclick="showToast('投稿しました')">投稿しました</button>
+    <button class="btn btn-outline btn-sm" type="button" onclick="showToast('プロフィールを更新しました')">プロフィールを更新しました</button>
+    <button class="btn btn-outline btn-sm" type="button" onclick="showToast('いいねに失敗しました', true)">いいねに失敗しました（エラー）</button>
+    <button class="btn btn-outline btn-sm" type="button" onclick="showToast('セッションの有効期限が切れました', true)">セッション切れ（エラー）</button>
+    <button class="btn btn-outline btn-sm" type="button" onclick="showToast('この操作を行う権限がありません', true)">403（エラー）</button>
+    <button class="btn btn-outline btn-sm" type="button" onclick="showToast('通信に失敗しました。時間をおいて再度お試しください', true)">500（エラー）</button>
+  </div>
+
+  <!-- ⑤ 正常 -->
+  <div class="section-bar">⑤ 正常 — 投稿カード</div>
+  <div id="normal-post"></div>
+
+  <div class="list-foot">これ以上投稿はありません</div>
+
+</main>
+
+<script src="mock.js"></script>
+<script>
+  document.getElementById('normal-post').innerHTML = postCardHtml(POSTS[0]);
+</script>
+</body>
+</html>
