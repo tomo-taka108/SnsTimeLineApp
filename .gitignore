@@ -1,0 +1,81 @@
+# ===== 秘密情報 =====
+# 絶対にコミットしない（docs/07_architecture.md 5章）
+.env
+.env.backup
+.env.production
+.env.local
+
+# ===== アップロード画像の実体 =====
+# ローカルストレージの保存先（docs/07_architecture.md 6.3）
+uploads/
+backend/uploads/
+
+# ===== Java / Spring Boot =====
+target/
+build/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+*.class
+*.jar
+*.war
+!**/gradle/wrapper/gradle-wrapper.jar
+.gradle/
+hs_err_pid*
+replay_pid*
+
+# ===== Node / React =====
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== IDE =====
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+!.vscode/extensions.json
+.fleet/
+.nova/
+.zed/
+.settings/
+.project
+.classpath
+.apt_generated/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== ログ =====
+*.log
+logs/
+
+# ===== Claude Code のローカル/一時ファイル（共有しない） =====
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# ===== Terraform（インフラをコード化した場合。docs/10_infrastructure.md 7章） =====
+# tfstate は機密（パスワード等が平文で入りうる）ためコミットしない
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+# 変数の実値（機密を含みうる）はコミットせず、*.tfvars.example のみ共有する
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# プロバイダ lock は共有するのでコミットする（除外しない）
+!.terraform.lock.hcl

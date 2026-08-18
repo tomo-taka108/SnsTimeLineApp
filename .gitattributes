@@ -1,0 +1,17 @@
+* text=auto eol=lf
+
+*.css diff=css
+*.html diff=html
+*.md diff=markdown
+*.java diff=java
+*.sql diff=sql
+
+*.jar binary
+*.png binary
+*.jpg binary
+*.webp binary
+
+mvnw text eol=lf
+*.cmd text eol=crlf
+
+/.github export-ignore
