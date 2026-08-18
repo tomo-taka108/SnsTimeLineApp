@@ -105,7 +105,36 @@ gh pr create --title "docs: 要件定義書を作成" --base main
 6. git push origin feature/<ブランチ名>
 7. gh pr create でPRを作成する
 8. PRをマージする（マージはユーザーが行う）
-9. git branch -d feature/<ブランチ名> でローカルブランチを削除する
+9. git sync でmainに戻り、マージ済みブランチを掃除する（5.1参照）
+```
+
+### 5.1 マージ後の後片付け（自動化済み）
+
+**リモートブランチは削除不要。** リポジトリ設定で `delete_branch_on_merge` を有効にしているため、
+PRをマージするとGitHub側のブランチは自動で消える。
+
+**ローカルは `git sync` で掃除する。** グローバルのgit aliasとして登録済み。
+
+```bash
+git sync
+```
+
+このコマンドは以下を順に実行する。
+
+| # | 内容 |
+|---|---|
+| 1 | `git checkout main` — mainへ戻る |
+| 2 | `git pull --prune` — マージ結果を取り込み、消えたリモート追跡ブランチを整理する |
+| 3 | `git branch --merged main` を `git branch -d` — **マージ済みのローカルブランチだけ**を削除する |
+
+> **未マージのブランチは消えない。** `-D`（強制削除）ではなく `-d` を使っているため、
+> マージされていない作業中のブランチは Git が削除を拒否する。誤って作業を失うことはない。
+
+エイリアスの定義を確認・変更する場合:
+
+```bash
+git config --global --get alias.sync     # 確認
+git config --global --unset alias.sync   # 解除
 ```
 
 ---
