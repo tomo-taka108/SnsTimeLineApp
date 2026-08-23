@@ -17,7 +17,7 @@ flowchart LR
     subgraph Back["バックエンド :8080"]
       C["Controller層"]
       S["Service層"]
-      RP["Repository層"]
+      RP["Mapper層<br/>MyBatis"]
       FS["FileStorageService"]
     end
 
@@ -54,10 +54,12 @@ Controller  … HTTPの入出力のみ。DTOへの変換とバリデーション
     ↓
 Service     … 業務ロジック。トランザクション境界はここ
     ↓
-Repository  … DBアクセス。SQLとエンティティのマッピング
+Mapper      … DBアクセス。SQLの実行とオブジェクトへのマッピング（MyBatis）
     ↓
-Entity      … DBのテーブルに対応するJavaオブジェクト
+ドメインモデル … DBのテーブルに対応するJavaオブジェクト（record）
 ```
+
+> **MyBatis 採用（[09_decision_log.md](09_decision_log.md) D-25）に伴う名称**: DBアクセス層は `@Mapper` インターフェース＋Mapper XML で実装する。SQLは `src/main/resources/mapper/*.xml` に集約する。層としての責務は「Repository層」と呼んでいたものと変わらない。
 
 ### 2.1 各層の責務
 
@@ -65,9 +67,9 @@ Entity      … DBのテーブルに対応するJavaオブジェクト
 |---|---|---|
 | **Controller** | リクエストの受け取り、`@Valid` によるバリデーション起動、認証ユーザーの取得、DTOへの変換、HTTPステータスの決定 | 業務ロジック、DBアクセス、トランザクション管理 |
 | **Service** | 業務ロジック、**トランザクション境界（`@Transactional`）**、認可（他人のリソースか判定）、複数リポジトリの協調 | HTTPの知識（`HttpServletRequest` を受け取らない）、DTOの直接返却 |
-| **Repository** | クエリの発行、エンティティのマッピング | 業務ロジック、トランザクション制御 |
+| **Mapper** | クエリの発行、オブジェクトへのマッピング | 業務ロジック、トランザクション制御 |
 
-> **トランザクション境界を Service に置く理由**: いいねの登録とカウンタ更新のように、**複数のDB操作をひとまとまりにする**必要があるため（[04_data_model.md](04_data_model.md) 3.1 実装ルール①）。Repositoryに置くと個々の操作が別トランザクションになり、整合性が保てない。
+> **トランザクション境界を Service に置く理由**: いいねの登録とカウンタ更新のように、**複数のDB操作をひとまとまりにする**必要があるため（[04_data_model.md](04_data_model.md) 3.1 実装ルール①）。Mapperに置くと個々の操作が別トランザクションになり、整合性が保てない。
 
 ### 2.2 パッケージ構成案
 
@@ -231,25 +233,30 @@ flowchart LR
 
 | 項目 | 内容 |
 |---|---|
-| 署名アルゴリズム | HS256（共通鍵） |
-| 秘密鍵 | 環境変数 `JWT_SECRET` から読む。**ソースコードにハードコードしない** |
-| ペイロード | `sub`（ユーザーID）、`iat`、`exp` |
+| ライブラリ | **jjwt 0.12.7**（GSON版。[09_decision_log.md](09_decision_log.md) D-26） |
+| 署名アルゴリズム | HS256（共通鍵）。**`alg: none` と HS256 以外を拒否する** |
+| 秘密鍵 | 環境変数 `JWT_SECRET` から読む。**ソースコードにハードコードしない**。32バイト未満なら**起動を失敗させる** |
+| ペイロード | `sub`（ユーザーID）、`iat`、`exp`。**メールアドレスは入れない** |
 | 有効期限 | 24時間 |
 | 保管場所（クライアント） | `localStorage`（[06_non_functional.md](06_non_functional.md) で比較、[09_decision_log.md](09_decision_log.md) D-07に記録） |
 
 **セッションを持たない。** `SessionCreationPolicy.STATELESS` を設定する。
+
+> **401 / 403 は `@RestControllerAdvice` では捕捉できない。** 認証エラーはフィルタチェーン内で発生し、DispatcherServlet まで到達しないため。統一エラー形式（F-CO-01）を守るには `AuthenticationEntryPoint` と `AccessDeniedHandler` を実装してJSONを書き出す必要がある。**実装しないとボディが空の401になる。**
+
+> **CORSフィルタは認証フィルタより前に置く。** `http.cors(...)` が挿入する `CorsFilter` は `UsernamePasswordAuthenticationFilter` より前に入るため、JWTフィルタを `addFilterBefore(..., UsernamePasswordAuthenticationFilter.class)` で差せば自動的にCORSの後になる（[05_api_design.md](05_api_design.md) 7章のハマりどころ）。
 
 ### 4.2 認可（他人のリソースの保護）
 
 **管理者ロールは設けない**（[01_requirements.md](01_requirements.md) 4章）。認可は「自分のリソースか」の1点のみ。
 
 ```java
-// Service層で行う
-Post post = postRepository.findActiveById(postId)
-    .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND));
+// Service層で行う。findById のSQLには deleted_at IS NULL が入っている（D-25）
+Post post = postMapper.findById(postId)
+    .orElseThrow(NotFoundException::new);          // ① 存在しない → 404
 
-if (!post.getUserId().equals(currentUserId)) {
-    throw new ForbiddenException(ErrorCode.FORBIDDEN);  // 403
+if (!post.userId().equals(currentUserId)) {
+    throw new ForbiddenException();                // ② 他人のもの → 403
 }
 ```
 
@@ -324,21 +331,27 @@ volumes:
 ```
 SnsTimeLineApp/
 ├─ docs/                  要件定義ドキュメント（本ドキュメント群）
+├─ mockup/                画面モックアップ（静的HTML）
 ├─ backend/               Spring Boot
+│   ├─ pom.xml
+│   ├─ mvnw / mvnw.cmd    Maven Wrapper
 │   ├─ src/main/java/
 │   ├─ src/main/resources/
 │   │   ├─ application.yml
-│   │   └─ db/migration/  Flyway
+│   │   ├─ db/migration/  Flyway
+│   │   └─ mapper/        MyBatis の SQL（*.xml）
 │   └─ uploads/           画像の保存先（.gitignore に追加）
-├─ frontend/              React + Vite
+├─ frontend/              React + Vite ※未作成
 │   ├─ src/
 │   └─ package.json
 ├─ docker-compose.yml
 ├─ .env                   秘密情報（.gitignore に追加）
+├─ .env.example           .env のテンプレート（こちらはコミットする）
 └─ README.md
 ```
 
 > **`uploads/` と `.env` は必ず `.gitignore` に入れる。**
+> **SQLはMapper XMLに集約する。** `@Select` などのアノテーションにSQLを書くと、論理削除の除外条件を共通化できないため（[09_decision_log.md](09_decision_log.md) D-25）。
 
 ---
 
@@ -372,19 +385,21 @@ SC-01 ログイン画面へ遷移 + トースト「セッションの有効期�
 
 要件定義が完了した後、以下の順で実装すると詰まりにくい。
 
-| # | 内容 | 完了の目安 |
-|---|---|---|
-| 1 | DB構築（Flywayマイグレーション） | 全テーブルと制約・インデックスが作られる |
-| 2 | 認証（#1〜#3） | curlでJWTが取得でき、`/auth/me` が通る |
-| 3 | 投稿作成・全体TL（#5 `tab=all`, #6, #7） | テキスト投稿がタイムラインに並ぶ |
-| 4 | フロント: ログイン + タイムライン表示 | ブラウザで一連の流れが見える |
-| 5 | いいね（#14, #15） | **カウンタの整合性をここで作り込む。二重いいねのテストを必ず書く** |
-| 6 | コメント（#10, #11, #13） | カウンタの非対称ルールを実装 |
-| 7 | 画像アップロード（#25, #26） | `FileStorageService` の抽象化を最初から入れる |
-| 8 | フォロー + フォロー中TL（#21, #22, #5 `tab=following`） | MVPの一周が完成 |
-| 9 | プロフィール（#17〜#19） | |
-| 10 | 削除（#9, #13）と論理削除の徹底 | 削除済みがどこにも出ないことを確認 |
-| 11 | 無限スクロール（カーソルページネーション） | **シードデータで25件以上の投稿を用意して確認** |
+| # | 内容 | 完了の目安 | 状態 |
+|---|---|---|---|
+| 1 | DB構築（Flywayマイグレーション） | 全テーブルと制約・インデックスが作られる | **`V1`(users) のみ完了** |
+| 2 | 認証（#1〜#3） | curlでJWTが取得でき、`/auth/me` が通る | **完了** |
+| 3 | 投稿作成・全体TL（#5 `tab=all`, #6, #7） | テキスト投稿がタイムラインに並ぶ | 次はここ |
+| 4 | フロント: ログイン + タイムライン表示 | ブラウザで一連の流れが見える | 未着手 |
+| 5 | いいね（#14, #15） | **カウンタの整合性をここで作り込む。二重いいねのテストを必ず書く** | 未着手 |
+| 6 | コメント（#10, #11, #13） | カウンタの非対称ルールを実装 | 未着手 |
+| 7 | 画像アップロード（#25, #26） | `FileStorageService` の抽象化を最初から入れる | 未着手 |
+| 8 | フォロー + フォロー中TL（#21, #22, #5 `tab=following`） | MVPの一周が完成 | 未着手 |
+| 9 | プロフィール（#17〜#19） | | 未着手 |
+| 10 | 削除（#9, #13）と論理削除の徹底 | 削除済みがどこにも出ないことを確認 | 未着手 |
+| 11 | 無限スクロール（カーソルページネーション） | **シードデータで25件以上の投稿を用意して確認** | 未着手 |
+
+> **自動テストは今回のスコープ外**（別タイミングで実装予定）。ステップ5の「二重いいねのテスト」もそのときに書く。
 
 > **ステップ5で手を抜かないこと。** カウンタの整合性は後から直すのが難しい。トランザクション境界とSQL側の相対更新を最初から正しく実装する。
 

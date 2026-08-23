@@ -16,7 +16,8 @@ public enum ErrorCode {
   NOT_FOUND(HttpStatus.NOT_FOUND, "リソースが見つかりません"),
   EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "このメールアドレスは既に登録されています"),
   USERNAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "このユーザー名は既に使われています"),
-  FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "ファイルサイズが大きすぎます"),
+  // Spring 7 で PAYLOAD_TOO_LARGE は非推奨（CONTENT_TOO_LARGE に改称）。ステータス値 413 は同じ
+  FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "ファイルサイズが大きすぎます"),
   UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "対応していないファイル形式です"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "サーバーエラーが発生しました");
 

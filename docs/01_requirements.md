@@ -281,11 +281,15 @@ Aさんが投稿を削除 → 両者のタイムラインから消える
 
 | 層 | 技術 | 備考 |
 |---|---|---|
-| フロントエンド | React（SPA） | バックエンドとは**別オリジン**で動作させる |
-| バックエンド | Spring Boot | REST APIのみを提供。画面のレンダリングは行わない |
-| データベース | PostgreSQL | |
-| 認証方式 | メールアドレス＋パスワード、**JWT** | `Authorization: Bearer <token>` ヘッダーで送信 |
+| フロントエンド | React（SPA）+ Vite + TypeScript | バックエンドとは**別オリジン**で動作させる |
+| バックエンド | **Spring Boot 4.1.0 / JDK 25** | REST APIのみを提供。画面のレンダリングは行わない |
+| O/Rマッパー | **MyBatis** | SQLを直接記述する。[09_decision_log.md](09_decision_log.md) D-25 |
+| データベース | PostgreSQL 16 | |
+| マイグレーション | Flyway | |
+| 認証方式 | メールアドレス＋パスワード、**JWT**（jjwt / HS256） | `Authorization: Bearer <token>` ヘッダーで送信 |
 | 画像保存先 | **サーバーのローカルディレクトリ** | 将来S3に差し替えられる抽象化を設計に含める。詳細は [07_architecture.md](07_architecture.md) |
+
+> **バージョンは実装時に確定した**（[09_decision_log.md](09_decision_log.md) D-25, D-26, D-28）。当初は JDK 21 を想定していたが、JDK 25 の採用に伴い Spring Boot も 4.x 系となった。
 
 ### 8.2 制約
 

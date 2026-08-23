@@ -124,6 +124,10 @@ erDiagram
 | CHECK | `char_length(display_name) >= 1` |
 
 > **`email` / `username` の一意制約に `deleted_at` を絡めない**: 退会したユーザーのメールアドレスは再利用させない方針とする。部分ユニークインデックスにすると退会後に同じメールで再登録できてしまい、過去の投稿との紐付けが曖昧になるため。
+>
+> **この方針の帰結**: 登録時の重複チェックは**論理削除済みのユーザーも対象に含める**必要がある。退会済みのメールで再登録しようとした場合も409にする（[09_decision_log.md](09_decision_log.md) D-25）。
+
+> **一意制約には明示的に名前を付ける**（`uq_users_email` / `uq_users_username`）。DBが一意制約違反を返したとき、**制約名を見てエラーコードを出し分ける**ため（`EMAIL_ALREADY_EXISTS` か `USERNAME_ALREADY_EXISTS` か）。PostgreSQLの自動命名に任せると判別が不安定になる。
 
 ---
 
@@ -824,7 +828,7 @@ WHERE follower_id = :me AND followee_id = ANY(:userIds);
 
 ```
 src/main/resources/db/migration/
-├─ V1__create_users.sql
+├─ V1__create_users.sql            ← 作成済み（認証実装時）
 ├─ V2__create_stored_files.sql
 ├─ V3__create_posts.sql
 ├─ V4__create_comments.sql
