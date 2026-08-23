@@ -1,0 +1,539 @@
+/*
+ * 全体で使うスタイル。
+ *
+ * mockup/common.css から、認証画面・ヘッダー・トーストに必要な部分だけを移植した。
+ * デザイントークン（:root）はモックアップのものをそのまま採用する。
+ * モック専用の .mock-banner / .note-box は持ち込まない。
+ */
+
+/* ===== デザイントークン ===== */
+:root {
+  /* ブランド */
+  --color-primary: #1d9bf0;
+  --color-primary-dark: #1a8cd8;
+  --color-primary-soft: #e8f5fd;
+
+  /* 状態 */
+  --color-danger: #f4212e;
+  --color-success: #00ba7c;
+
+  /* 面・文字 */
+  --color-bg: #ffffff;
+  --color-bg-sub: #f7f9f9;
+  --color-surface: #ffffff;
+  --color-border: #eff3f4;
+  --color-border-strong: #cfd9de;
+  --color-text: #0f1419;
+  --color-text-sub: #536471;
+
+  --radius: 16px;
+  --radius-sm: 8px;
+  --header-h: 56px;
+  --content-w: 600px;
+}
+
+/* ===== ベース ===== */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  background: var(--color-bg-sub);
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+/* ===== 認証画面（SC-01 / SC-02） ===== */
+/* 未ログイン画面はヘッダーを表示せず、中央にフォームのみを置く（docs/03_screen_design.md 4.1） */
+.auth-wrap {
+  /* モックの calc(100vh - 30px) はモックバナー分の補正。実装では画面全体を使う */
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background:
+    radial-gradient(circle at 12% 15%, rgba(29, 155, 240, 0.12), transparent 42%),
+    radial-gradient(circle at 88% 20%, rgba(249, 24, 128, 0.08), transparent 45%),
+    var(--color-bg-sub);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 36px 32px;
+  box-shadow: 0 10px 34px rgba(15, 20, 25, 0.08);
+}
+
+.auth-card .brand {
+  text-align: center;
+  margin-bottom: 6px;
+  font-size: 30px;
+  color: var(--color-primary);
+}
+
+.auth-card h1 {
+  text-align: center;
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+
+.auth-card .lead {
+  text-align: center;
+  color: var(--color-text-sub);
+  font-size: 13px;
+  margin: 0 0 26px;
+}
+
+.auth-footer {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-sub);
+}
+
+/* ===== フォーム ===== */
+.form-field {
+  margin-bottom: 18px;
+}
+
+.form-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--color-text-sub);
+}
+
+.form-field .required::after {
+  content: " *";
+  color: var(--color-danger);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.input:disabled {
+  background: var(--color-bg-sub);
+  color: var(--color-text-sub);
+  cursor: not-allowed;
+}
+
+.input.is-error {
+  border-color: var(--color-danger);
+}
+
+/* バリデーションエラーは該当フィールドの直下に赤字で出す（docs/03_screen_design.md 8章） */
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.field-hint {
+  color: var(--color-text-sub);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+/* 認証失敗（401）はフォーム上部にまとめて出す（docs/03_screen_design.md 8章） */
+.form-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(244, 33, 46, 0.08);
+  border: 1px solid rgba(244, 33, 46, 0.3);
+  color: #b3121c;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+
+/* ===== ボタン ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 9px 20px;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  text-decoration: none;
+  opacity: 0.88;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-accent {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ===== ヘッダー（ログイン時のみ表示） ===== */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--header-h);
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-header .logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.app-header .logo:hover {
+  text-decoration: none;
+  opacity: 0.75;
+}
+
+.app-header .logo .logo-mark {
+  color: var(--color-primary);
+  font-size: 22px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ===== アバターとドロップダウン ===== */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 800;
+  font-size: 17px;
+  flex-shrink: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.avatar-sm {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.avatar-lg {
+  width: 88px;
+  height: 88px;
+  font-size: 34px;
+}
+
+.avatar-menu {
+  position: relative;
+}
+
+.avatar-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: transparent;
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.avatar-menu-trigger:hover {
+  background: var(--color-border);
+}
+
+.avatar-menu-trigger .caret {
+  font-size: 10px;
+  color: var(--color-text-sub);
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 190px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 28px rgba(15, 20, 25, 0.16);
+  padding: 6px 0;
+  display: none;
+  z-index: 250;
+}
+
+.dropdown.is-open {
+  display: block;
+}
+
+.dropdown a,
+.dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+}
+
+.dropdown a:hover,
+.dropdown button:hover {
+  background: var(--color-bg-sub);
+  text-decoration: none;
+}
+
+.dropdown .divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 6px 0;
+}
+
+/* ===== メイン領域 ===== */
+.app-main {
+  max-width: var(--content-w);
+  margin: 0 auto;
+  background: var(--color-surface);
+  min-height: calc(100dvh - var(--header-h));
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  padding: 28px 20px 96px;
+}
+
+/* ===== トースト（画面下部・3秒で自動消滅） ===== */
+.toast-area {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 22px;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(15, 20, 25, 0.28);
+  animation: toast-in 0.2s ease;
+  max-width: 88vw;
+}
+
+.toast.is-error {
+  background: var(--color-danger);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ===== スピナー（起動時の認証復元中に使う） ===== */
+.spinner {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--color-border-strong);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.page-center {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-sub);
+  font-size: 14px;
+}
+
+/* ===== ログイン後の仮ページ（SC-03 の暫定） ===== */
+.welcome {
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* バッジ・アバター・名前を縦に積む。
+   .welcome-badge も .avatar も inline-flex のため、
+   flex コンテナにしないと横に並んでしまう */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.welcome .welcome-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 186, 124, 0.1);
+  color: #0a7d57;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 22px;
+}
+
+.welcome .avatar {
+  margin-bottom: 14px;
+}
+
+.welcome h1 {
+  font-size: 20px;
+  margin: 0 0 2px;
+}
+
+.welcome .handle {
+  color: var(--color-text-sub);
+  font-size: 14px;
+  margin: 0 0 24px;
+}
+
+.welcome .next-note {
+  width: 100%;
+  border-top: 1px solid var(--color-border);
+  padding-top: 20px;
+  margin: 0;
+  color: var(--color-text-sub);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+/* ===== レスポンシブ ===== */
+@media (max-width: 767px) {
+  body {
+    font-size: 14px;
+  }
+
+  .auth-card {
+    padding: 28px 20px;
+  }
+
+  .app-main {
+    border-left: none;
+    border-right: none;
+  }
+}
