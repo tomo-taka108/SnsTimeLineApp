@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.snstimeline.auth.RefreshTokenMapper">
+
+  <sql id="tokenColumns">
+    id, user_id, token_hash, family_id, expires_at, used_at, revoked_at, created_at
+  </sql>
+
+  <!--
+    使用済み・失効済みも含めて引く。
+    使用済みトークンの再提示を「盗用」として検知するため、
+    ここで除外してはいけない（docs/09_decision_log.md D-29）。
+  -->
+  <select id="findByTokenHash" resultType="com.example.snstimeline.auth.RefreshToken">
+    SELECT <include refid="tokenColumns"/>
+    FROM refresh_tokens
+    WHERE token_hash = #{tokenHash}
+  </select>
+
+  <!--
+    値の埋め込みは必ず #{}（プリペアドステートメント）。
+    ${} は文字列置換でSQLインジェクションになるため使わない
+    （docs/06_non_functional.md 3.7）。
+  -->
+  <insert id="insert">
+    INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
+    VALUES (
+      #{token.userId},
+      #{token.tokenHash},
+      #{token.familyId},
+      #{token.expiresAt}
+    )
+  </insert>
+
+  <!--
+    used_at IS NULL を条件に入れているのが要点。
+    同じトークンで同時に2回リフレッシュされても、UPDATE できるのは片方だけになる
+    （PostgreSQL の行ロックで直列化され、負けた側は0件になる）。
+    アプリ側の if 文で防ごうとすると TOCTOU 競合をすり抜ける。
+  -->
+  <update id="markUsed">
+    UPDATE refresh_tokens
+    SET used_at = #{now}
+    WHERE id = #{id}
+      AND used_at IS NULL
+  </update>
+
+  <!-- 盗用検知時のファミリー一括失効。既に失効済みの行は触らない -->
+  <update id="revokeFamily">
+    UPDATE refresh_tokens
+    SET revoked_at = #{now}
+    WHERE family_id = #{familyId}
+      AND revoked_at IS NULL
+  </update>
+
+  <!-- ログアウト。そのユーザーの有効なトークンをすべて失効させる -->
+  <update id="revokeAllByUserId">
+    UPDATE refresh_tokens
+    SET revoked_at = #{now}
+    WHERE user_id = #{userId}
+      AND revoked_at IS NULL
+  </update>
+
+</mapper>

@@ -27,15 +27,21 @@
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
 ```
 
-| 項目 | 内容 |
-|---|---|
-| 方式 | JWT（署名アルゴリズム: HS256） |
-| ペイロード | `sub`（ユーザーID）、`iat`（発行日時）、`exp`（有効期限） |
-| 有効期限 | 24時間 |
-| リフレッシュ | **行わない**。期限切れは再ログイン（[01_requirements.md](01_requirements.md) 3.2） |
-| 失効管理 | **行わない**。ログアウトはクライアント側のトークン破棄のみ（F-AU-03） |
+**トークンは2種類ある**（[09_decision_log.md](09_decision_log.md) D-29）。
 
-**認証が必要なエンドポイントでトークンが無効・期限切れの場合は `401 Unauthorized` を返す。** クライアントは401を受けたらトークンを破棄してログイン画面へ遷移する（F-CO-02）。
+| | アクセストークン | リフレッシュトークン |
+|---|---|---|
+| 形式 | **JWT**（HS256） | **不透明トークン**（ランダム256bitをURLセーフBase64。DBにSHA-256ハッシュで保存） |
+| ペイロード | `sub`（ユーザーID）、`iat`、`exp` | なし（DBの行が実体） |
+| 有効期限 | **15分** | **14日** |
+| 送信先 | すべての保護されたAPI（`Authorization` ヘッダー） | `POST /auth/refresh` のボディのみ |
+| 失効 | **できない**（ステートレスの代償） | **できる**（ログアウト・盗用検知） |
+
+**リフレッシュは1回で使い捨て（ローテーション）。** `POST /auth/refresh` は新しいアクセストークンとリフレッシュトークンの両方を返す。クライアントは古いリフレッシュトークンを破棄して、新しい値を保存し直すこと。
+
+> **使用済みのリフレッシュトークンが再提示されると、そのログインに由来するトークンをすべて失効させる。** トークンが漏れて攻撃者と正規ユーザーの両方が使っている可能性が高いため、どちらにも再ログインを強制する（安全側に倒す）。他の端末のログインは巻き込まない。
+
+**認証が必要なエンドポイントでトークンが無効・期限切れの場合は `401 Unauthorized` を返す。** クライアントは401を受けたら **`POST /auth/refresh` で再発行を試み**、それも401なら両方のトークンを破棄してログイン画面へ遷移する（F-CO-02）。
 
 ### 1.3 エラーレスポンス統一形式
 
@@ -167,6 +173,8 @@ eyJjIjoiMjAyNi0wOC0xN1QxMjozNDo1NloiLCJpIjoxMjM0fQ==
 | 2 | `POST` | `/auth/login` | 不要 | F-AU-02 | ログイン |
 | 3 | `GET` | `/auth/me` | 必要 | F-AU-04 | 現在のユーザー情報取得 |
 | 4 | `PUT` | `/auth/password` | 必要 | F-AU-05 | パスワード変更（Phase2） |
+| 27 | `POST` | `/auth/refresh` | **不要** | F-AU-06 | トークン再発行（アクセストークンの期限切れ時） |
+| 28 | `POST` | `/auth/logout` | 必要 | F-AU-03 | ログアウト（リフレッシュトークンの失効） |
 | 5 | `GET` | `/timeline` | 必要 | F-TL-01〜03 | タイムライン取得 |
 | 6 | `POST` | `/posts` | 必要 | F-PO-01, F-PO-02 | 投稿作成 |
 | 7 | `GET` | `/posts/{postId}` | 必要 | F-PO-03 | 投稿詳細取得 |
@@ -189,6 +197,8 @@ eyJjIjoiMjAyNi0wOC0xN1QxMjozNDo1NloiLCJpIjoxMjM0fQ==
 | 24 | `GET` | `/users/{userId}/followers` | 必要 | F-FL-04 | フォロワー一覧（Phase2） |
 | 25 | `POST` | `/files` | 必要 | F-IM-01, F-IM-03 | 画像アップロード |
 | 26 | `GET` | `/files/{fileId}` | 不要 | F-IM-02 | 画像配信 |
+
+> **#27 / #28 は後から追加した認証エンドポイント**（[09_decision_log.md](09_decision_log.md) D-29）。認証系なので表では #4 の直後に置いているが、**番号は末尾の続き**にしている。既存の番号を振り直さないため（CLAUDE.md 7.4「IDは一度振ったら変更しない」）。
 
 ### 3.1 設計上の重要な判断
 
@@ -418,14 +428,16 @@ SELECT post_id FROM likes WHERE user_id = :me AND post_id = ANY(:postIds);
 **レスポンス `201 Created`**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiJ9....",
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9....",
+  "refreshToken": "vxThD252Pqr0CDPbWK3S9z8C17-m-NhhM2cozXinYtY",
+  "expiresIn": 900,
   "user": { "id": 1, "username": "taro_123", "displayName": "たろう", "avatarUrl": null }
 }
 ```
 
 **エラー**: `400 VALIDATION_ERROR` / `409 EMAIL_ALREADY_EXISTS` / `409 USERNAME_ALREADY_EXISTS`
 
-> **登録と同時にJWTを返す**ことで、クライアントはログイン画面を経由せずSC-03へ遷移できる（F-AU-01）。
+> **登録と同時にトークンを返す**ことで、クライアントはログイン画面を経由せずSC-03へ遷移できる（F-AU-01）。`expiresIn` はアクセストークンの有効秒数（900秒＝15分）で、クライアントが再発行のタイミングを判断するために返す（JWTを自前でデコードさせないため）。
 
 ---
 
@@ -438,7 +450,7 @@ SELECT post_id FROM likes WHERE user_id = :me AND post_id = ANY(:postIds);
 { "email": "taro@example.com", "password": "Password1" }
 ```
 
-**レスポンス `200 OK`**: #1と同じ形式（`token` + `user`）
+**レスポンス `200 OK`**: #1と同じ形式（`accessToken` + `refreshToken` + `expiresIn` + `user`）
 
 **エラー**: `401 INVALID_CREDENTIALS`
 
@@ -468,8 +480,67 @@ SELECT post_id FROM likes WHERE user_id = :me AND post_id = ANY(:postIds);
 **レスポンス `204 No Content`**
 **エラー**: `400 VALIDATION_ERROR` / `401 INVALID_CREDENTIALS`（現在のパスワードが違う）
 
-> 変更後も**既存のJWTは有効なまま**（失効管理をしないため）。ログアウトはさせない。
+> **Phase2で実装する際は、パスワード変更時にリフレッシュトークンを全失効させること**（`refreshTokenService.revokeAll(userId)`）。パスワードを変えた理由が「漏洩したかもしれない」である以上、他端末のセッションを生かしたままにするのは危険なため。**当初の「既存のJWTは有効なまま」という記述は、リフレッシュトークン導入（D-29）により見直した。** なお発行済みアクセストークンは最大15分間有効なままである（ステートレスJWTの性質）。
 
+---
+
+### #27 `POST /auth/refresh` — トークン再発行
+
+**認証**: **不要** / **機能**: F-AU-06 / **画面**: 全画面（401を受けたとき）
+
+**リクエスト**
+```json
+{ "refreshToken": "vxThD252Pqr0CDPbWK3S9z8C17-m-NhhM2cozXinYtY" }
+```
+
+**レスポンス `200 OK`**
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9....",
+  "refreshToken": "sKKeOeyoFZNIx8Qw3rTvB2mNpLcJ7dYhGa4Ue1KsZoM",
+  "expiresIn": 900
+}
+```
+
+**エラー**: `400 VALIDATION_ERROR`（未指定）/ `401 INVALID_REFRESH_TOKEN`
+
+> **`user` を含まない。** 再発行はトークンの差し替えだけが目的で、ユーザー情報が必要なら `GET /auth/me` を呼べばよいため。
+
+> **なぜ認証不要なのか**: アクセストークンが期限切れになった状態で呼ぶAPIだから。有効なアクセストークンを要求したら、そもそも再発行する必要がない。**ボディのリフレッシュトークンそのものが認証情報になる。**
+
+> **返ってきた `refreshToken` は必ず保存し直すこと（ローテーション）。** 送った側のトークンはこの時点で使用済みになり、二度と使えない。古い値を持ち続けて再送すると、盗用とみなされて**そのログインのトークンがすべて失効する**（＝再ログインになる）。
+
+**`401 INVALID_REFRESH_TOKEN` を返す条件**（**理由は区別しない**）
+
+| # | 条件 |
+|---|---|
+| 1 | そのトークンが存在しない（でたらめな値） |
+| 2 | 有効期限（14日）を過ぎている |
+| 3 | 既に使用済み → **さらにファミリー全体を失効させる**（盗用検知） |
+| 4 | 失効済み（ログアウト、または盗用検知の巻き添え） |
+| 5 | 持ち主のユーザーが論理削除されている |
+
+> **理由を返さないのは意図的。** 「存在しない」と「失効済み」を区別すると、攻撃者に「そのトークンは実在する」という情報を与えてしまう。
+
+---
+
+### #28 `POST /auth/logout` — ログアウト
+
+**認証**: **必要** / **機能**: F-AU-03 / **画面**: 全画面（ヘッダーのメニュー）
+
+**リクエスト**: ボディなし
+
+**レスポンス `204 No Content`**
+
+**エラー**: `401 UNAUTHENTICATED`（アクセストークンが無効）
+
+> **なぜ認証が必要で、リフレッシュトークンをボディで受け取らないのか**: 「誰のトークンを失効させるか」をアクセストークンの `sub` から決めるため。ボディで受け取る方式にすると、**他人のリフレッシュトークンを送りつけて強制ログアウトさせる**妨害が成立してしまう。
+
+> **そのユーザーの全リフレッシュトークンを失効させる。** 他端末のログインも切れる。MVPでは端末ごとのセッション管理をしないため（[01_requirements.md](01_requirements.md) 3.2）。
+
+> **⚠️ 発行済みのアクセストークンは失効しない。** ステートレスJWTの本質的な性質で、最大15分間は使えてしまう。**クライアントは必ず localStorage の両トークンを破棄すること。** サーバー側の失効はあくまで「延長させない」ための措置である（[09_decision_log.md](09_decision_log.md) D-29）。
+
+---
 ---
 
 ### #5 `GET /timeline` — タイムライン取得
@@ -871,9 +942,10 @@ sequenceDiagram
     A->>A: BCrypt.matches で照合
 
     alt 認証成功
-        A->>A: JWT生成 sub=userId exp=24h
-        A-->>R: 200 token と user
-        R->>R: JWTを保存
+        A->>A: アクセストークン生成 sub=userId exp=15分
+        A->>D: INSERT INTO refresh_tokens ハッシュと family_id
+        A-->>R: 200 accessToken と refreshToken と user
+        R->>R: 両方のトークンを localStorage に保存
         R-->>U: SC-03 タイムラインへ遷移
     else 認証失敗 またはユーザーが存在しない
         A-->>R: 401 INVALID_CREDENTIALS
@@ -1027,10 +1099,19 @@ sequenceDiagram
 
 | 項目 | ルール |
 |---|---|
-| 文字列 | 前後の空白をトリムしてから検証する |
+| 文字列 | 前後の空白をトリムしてから検証する。**ただし `password` は除く**（[09_decision_log.md](09_decision_log.md) D-27） |
 | 本文（`body`） | トリム後に1文字以上（空白のみの投稿を防ぐ） |
 | 文字数 | **サロゲートペア（絵文字）を1文字として数える。** `String.length()` はUTF-16単位なので絵文字が2文字になる点に注意 |
 | ID | 数値以外が来たら `400` |
+
+**実装上の要点**（認証実装時に確定）:
+
+| # | 内容 |
+|---|---|
+| 1 | **トリムはJacksonのデシリアライズ時に行う。** 「ボディのデシリアライズ→`@Valid`」の順で処理されるため、ここでトリムすれば検証した文字列と保存する文字列が一致する。Service層でトリムすると、検証は未トリムの値に対して行われてしまう |
+| 2 | **`password` はトリムしない。** 前後の空白も正当なパスワード文字であり、黙って除去するとユーザーが正しく入力したパスワードでログインできなくなる |
+| 3 | **文字数チェックに Bean Validation の `@Size` は使えない。** `@Size` は `String.length()`（UTF-16単位）で数えるため絵文字が2文字になる。PostgreSQL の `char_length` はコードポイント数なので、`@Size` を使うと**アプリとDBで数え方が食い違う**。`codePointCount` を使う独自制約を実装する |
+| 4 | **1フィールドに複数の制約を重ねすぎない。** 例えばパスワードに `@Size(min=8)` と `@Pattern`（8文字以上を含む）を併記すると、短いパスワードで**エラーが2件返る**。`@Pattern` 1本にまとめる |
 
 ### レート制限
 
@@ -1039,6 +1120,7 @@ MVPでは実装しない。Phase3で必要になった場合、以下を候補�
 | 対象 | 制限案 |
 |---|---|
 | `POST /auth/login` | 同一IPから5回/分（ブルートフォース対策） |
+| `POST /auth/refresh` | 同一IPから20回/分（リフレッシュトークンの総当たり対策） |
 | `POST /posts` | 同一ユーザーから10回/分 |
 | `POST /files` | 同一ユーザーから20回/時 |
 
@@ -1052,6 +1134,8 @@ MVPでは実装しない。Phase3で必要になった場合、以下を候補�
 | 2 | `POST /auth/login` | F-AU-02 | SC-01 |
 | 3 | `GET /auth/me` | F-AU-04 | 全画面 |
 | 4 | `PUT /auth/password` | F-AU-05 | SC-11 |
+| 27 | `POST /auth/refresh` | F-AU-06 | 全画面（401を受けたとき） |
+| 28 | `POST /auth/logout` | F-AU-03 | 全画面（ヘッダーのメニュー） |
 | 5 | `GET /timeline` | F-TL-01, F-TL-02, F-TL-03 | SC-03 |
 | 6 | `POST /posts` | F-PO-01, F-PO-02 | MD-01 |
 | 7 | `GET /posts/{id}` | F-PO-03 | SC-04 |
