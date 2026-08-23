@@ -1,0 +1,22 @@
+# 開発用の PostgreSQL のみを起動する（docs/07_architecture.md 6.2）。
+# アプリ本体は Docker に入れない。IDEからの起動とデバッグを優先するため。
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: snstimeline
+      POSTGRES_USER: snsapp
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # dev-environment スキルの「healthy になっていること」を実際に判定できるようにする
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snsapp -d snstimeline"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

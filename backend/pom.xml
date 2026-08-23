@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>4.1.0</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.example</groupId>
+	<artifactId>snstimeline</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>snstimeline</name>
+	<description>SnsTimeLineApp backend</description>
+
+	<properties>
+		<java.version>25</java.version>
+		<!-- start.spring.io のメタデータは 4.1.0 未対応だが、Maven Central には
+		     spring-boot.version=4.1.0 でビルドされた 4.1.0 が公開されている（docs/09_decision_log.md D-25） -->
+		<mybatis-spring-boot.version>4.1.0</mybatis-spring-boot.version>
+		<jjwt.version>0.12.7</jjwt.version>
+		<!-- JDK 25 では javac の内部APIが変わっており、古い spotless / google-java-format は
+		     NoSuchMethodError で落ちる。JDK 25 に対応した版を明示的に指定する -->
+		<spotless.version>3.10.0</spotless.version>
+		<google-java-format.version>1.36.1</google-java-format.version>
+	</properties>
+
+	<dependencies>
+		<!-- ===== Web / セキュリティ / バリデーション ===== -->
+		<!-- Boot 4 では starter-web が starter-webmvc にリネームされた -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<!-- Boot 4 では validation が web starter に同梱されないため明示的に追加する -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- ===== DB: MyBatis + Flyway + PostgreSQL ===== -->
+		<dependency>
+			<groupId>org.mybatis.spring.boot</groupId>
+			<artifactId>mybatis-spring-boot-starter</artifactId>
+			<version>${mybatis-spring-boot.version}</version>
+		</dependency>
+		<!-- Boot 4 では flyway-core の直接依存だけでは自動設定が効かない -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<!-- Flyway 10 以降、PostgreSQL サポートは別 artifact -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- ===== JWT =====
+		     jjwt は Jackson 3 に未対応のため、Boot 4 の既定(Jackson 3)と衝突しないよう
+		     jjwt-jackson ではなく jjwt-gson を使う（docs/09_decision_log.md D-26） -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>${jjwt.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-gson</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!-- 整形。quality-check スキルの ./mvnw spotless:check に対応する -->
+			<plugin>
+				<groupId>com.diffplug.spotless</groupId>
+				<artifactId>spotless-maven-plugin</artifactId>
+				<version>${spotless.version}</version>
+				<configuration>
+					<java>
+						<googleJavaFormat>
+							<version>${google-java-format.version}</version>
+						</googleJavaFormat>
+						<removeUnusedImports/>
+						<trimTrailingWhitespace/>
+						<endWithNewline/>
+					</java>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

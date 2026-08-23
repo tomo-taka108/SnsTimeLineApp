@@ -79,3 +79,10 @@ override.tf.json
 *_override.tf.json
 # プロバイダ lock は共有するのでコミットする（除外しない）
 !.terraform.lock.hcl
+
+# ===== Maven Wrapper =====
+# Git は「最後にマッチしたパターン」を採用するため、上の *.jar より後に否定を書く。
+# （このプロジェクトの wrapper は distributionType=only-script で jar を持たないが、
+#   将来 jar 方式に変えたときに打ち消されないようにしておく）
+!.mvn/wrapper/maven-wrapper.jar
+!backend/.mvn/wrapper/maven-wrapper.jar
