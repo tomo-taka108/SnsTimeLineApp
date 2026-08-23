@@ -78,10 +78,21 @@ BASE=http://localhost:8080/api/v1
 curl -i -X POST "$BASE/auth/signup" -H 'Content-Type: application/json' \
   -d '{"email":"taro@example.com","username":"taro_123","displayName":"たろう","password":"Password1"}'
 
-TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"taro@example.com","password":"Password1"}' | jq -r .token)
+RES=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"taro@example.com","password":"Password1"}')
+ACCESS=$(echo "$RES" | jq -r .accessToken)
+REFRESH=$(echo "$RES" | jq -r .refreshToken)
 
-curl -i "$BASE/auth/me" -H "Authorization: Bearer $TOKEN"
+curl -i "$BASE/auth/me" -H "Authorization: Bearer $ACCESS"
+
+# トークン再発行（リフレッシュトークンは使い捨てなので、返り値で必ず上書きする）
+RES2=$(curl -s -X POST "$BASE/auth/refresh" -H 'Content-Type: application/json' \
+  -d "{\"refreshToken\":\"$REFRESH\"}")
+ACCESS=$(echo "$RES2" | jq -r .accessToken)
+REFRESH=$(echo "$RES2" | jq -r .refreshToken)
+
+# ログアウト（204。リフレッシュトークンが失効する）
+curl -i -X POST "$BASE/auth/logout" -H "Authorization: Bearer $ACCESS"
 ```
 
 フロント実装後はブラウザで http://localhost:5173 を開く。
@@ -93,7 +104,7 @@ docker compose down -v && docker compose up -d
 # バックエンドを再起動するとマイグレーションが最初から流れる
 ```
 
-> **現時点で存在するマイグレーションは `V1__create_users.sql` のみ。**
+> **現時点で存在するマイグレーションは `V1__create_users.sql` と `V2__create_refresh_tokens.sql` の2本。**
 > シードデータ（`V9__insert_seed_data.sql`）は未作成のため、リセット後のDBは空になる。
 > 動作確認用のユーザーは上記「バックエンド単体の動作確認」の signup で作る。
 
@@ -117,7 +128,9 @@ docker compose down -v && docker compose up -d
 ### 401 が返り続ける / ログイン状態が維持されない
 
 - `JWT_SECRET` が起動ごとに変わっていないか確認する（変わると既存トークンが全て無効になる）
-- トークンの有効期限は24時間（`JWT_EXPIRATION_HOURS`）
+- **アクセストークンの有効期限は15分**（`JWT_ACCESS_EXPIRATION_MINUTES`）。15分で401になるのは正常な挙動で、`POST /auth/refresh` で再発行する
+- リフレッシュトークンの有効期限は14日（`JWT_REFRESH_EXPIRATION_DAYS`）
+- **`/auth/refresh` が急に401になる場合、同じリフレッシュトークンを2回使っていないか確認する。** 使い捨て（ローテーション）のため、再利用は盗用とみなされ、そのログインのトークンが全て失効する
 - フロントは `localStorage` にJWTを保持する。ブラウザのApplicationタブで確認する
 
 ### Flyway のマイグレーションが失敗する

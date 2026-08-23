@@ -99,6 +99,10 @@
 | 機能ID | Feature ID | - | `F-PO-01` 形式の識別子。全ドキュメントを横断する一次キー |
 | 画面ID | Screen ID | - | `SC-03` 形式の識別子 |
 | MVP | Minimum Viable Product | - | アプリとして最小限成立する機能集合。[02_feature_list.md](02_feature_list.md) 参照 |
+| アクセストークン | Access Token | - | APIを呼ぶたびに送る短命（15分）のJWT。**失効させられない**（[09_decision_log.md](09_decision_log.md) D-29） |
+| リフレッシュトークン | Refresh Token | `refresh_tokens` | アクセストークンを再発行するための長命（14日）な不透明トークン。DBにSHA-256ハッシュで保存し、**失効させられる** |
+| ローテーション | Rotation | `used_at` | リフレッシュトークンを1回で使い捨て、毎回新しい値に差し替えること。盗用検知の前提となる |
+| ファミリー | Token Family | `family_id` | ログイン1回に由来するリフレッシュトークンの連鎖。盗用検知時の一括失効の単位 |
 
 ---
 

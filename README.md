@@ -73,7 +73,7 @@ DBにも閲覧ログを持たない設計としており、[要件定義書](doc
 | O/Rマッパー | **MyBatis** | SQLを直接書く。発行クエリ数を目視で確認できる（[D-25](docs/09_decision_log.md)） |
 | データベース | PostgreSQL 16 | データの永続化 |
 | マイグレーション | Flyway | DBスキーマの変更履歴をコード管理 |
-| 認証 | JWT（HS256, jjwt）+ BCrypt(cost 10) | ステートレス認証・パスワードハッシュ化 |
+| 認証 | JWT（HS256, jjwt）+ リフレッシュトークン + BCrypt(cost 10) | アクセストークン15分・リフレッシュトークン14日のローテーション方式 |
 | 画像保存 | ローカルディレクトリ → **Amazon S3** | S3利用は決定済み（[10](docs/10_infrastructure.md)） |
 | 開発環境 | Docker Compose（DBのみ） | PostgreSQL の起動。アプリはIDEから直接起動 |
 | インフラ | AWS（EC2 / RDS / ALB / S3）想定 | 構成図を作成済み。**構築するかは未決** |
@@ -85,7 +85,7 @@ DBにも閲覧ログを持たない設計としており、[要件定義書](doc
 - **React + Spring Boot（別オリジン構成）**：あえてSPAとREST APIを分離しました。サーバサイドレンダリングなら不要な**CORS・JWTによるステートレス認証・APIクライアントの共通化**といった課題に向き合うことが学習ゴールに直結するためです。
 - **PostgreSQL**：**部分インデックス**（`WHERE deleted_at IS NULL`）や**行値比較**（`(created_at, id) < (?, ?)`）、**pg_trgm** といった機能が、本アプリの設計課題（論理削除の除外・カーソルページネーション・あいまい検索）とそのまま噛み合うため採用しました。いずれもMySQLにはない、またはPostgreSQL側が扱いやすい機能です。
 - **Flyway**：DBスキーマの変更履歴をコードとして残し、長期運用での再現性を確保します。「**適用済みマイグレーションは編集しない**」という規約自体も学習項目としています。
-- **JWT（ステートレス）**：セッションをサーバーに持たないため、**EC2を複数台に増やしてもセッション共有の仕組みが不要**になります。インフラ構成を検討した際、この設計がそのまま活きることを確認しました（[10](docs/10_infrastructure.md) 3章）。
+- **JWT（ステートレス）＋ リフレッシュトークン**：セッションをサーバーに持たないため、**EC2を複数台に増やしてもセッション共有の仕組みが不要**になります。インフラ構成を検討した際、この設計がそのまま活きることを確認しました（[10](docs/10_infrastructure.md) 3章）。一方で**JWTは発行後に失効させられない**という弱点があるため、アクセストークンを15分と短命にし、失効可能なリフレッシュトークン（DB管理・使い捨て・盗用検知つき）で長いセッションを支える構成にしました（[D-29](docs/09_decision_log.md)）。
 - **Docker はDBのみ**：アプリ本体をコンテナに入れると、IDEからの起動とデバッグが煩雑になります。開発効率を優先し、**DBだけをコンテナ化**する構成としました。
 - **MyBatis（JPAではなく）**：発行されるSQLがコードと1対1で対応するため、「**タイムライン取得のSQL発行回数は3回以内**」「N+1を作らない」という自ら課した性能要件を、**目で確認しながら実装できます**。代償として論理削除の自動除外（Hibernateの`@SQLRestriction`相当）が無く、各SQLに`deleted_at IS NULL`を手書きする必要があるため、条件をXMLで共通化する等の歯止めを設けています（[D-25](docs/09_decision_log.md)）。
 - **jjwt**：非機能要件で「`alg: none` を受け入れない」ことを要求していますが、jjwtでは**これが設定ではなく既定の動作**です。安全側がデフォルトになっているライブラリを選びました（[D-26](docs/09_decision_log.md)）。実際に`alg:none`で細工したトークンが401で拒否されることを確認済みです。
@@ -361,8 +361,8 @@ lower(username) LIKE '%aro%'  → Seq Scan     ❌ 左端が不定なので木�
 - [x] **要件定義フェーズ** — ドキュメント一式（11本）が完成
 - [x] **画面モックアップ** — 全12画面 + 3モーダルの静的プロトタイプ（[mockup/](mockup/)）
 - [ ] **実装フェーズ** — 進行中
-  - [x] DB構築（`V1__create_users.sql`）
-  - [x] **認証・認可のバックエンド** — 新規登録 / ログイン / `GET /auth/me`
+  - [x] DB構築（`V1__create_users.sql` / `V2__create_refresh_tokens.sql`）
+  - [x] **認証・認可のバックエンド** — 新規登録 / ログイン / `GET /auth/me` / **トークン再発行 / ログアウト**（アクセストークン＋リフレッシュトークン方式）
   - [ ] 投稿作成・全体タイムライン
   - [ ] フロントエンド（React + Vite + TypeScript）
   - [ ] 自動テスト
@@ -431,17 +431,30 @@ cd frontend && npm install && npm run dev
 ```bash
 BASE=http://localhost:8080/api/v1
 
-# 新規登録（201。登録と同時にJWTが返る）
+# 新規登録（201。登録と同時にトークンが返る）
 curl -i -X POST "$BASE/auth/signup" -H 'Content-Type: application/json' \
   -d '{"email":"taro@example.com","username":"taro_123","displayName":"たろう","password":"Password1"}'
 
-# ログイン（200）
-TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"taro@example.com","password":"Password1"}' | jq -r .token)
+# ログイン（200）。アクセストークン（15分）とリフレッシュトークン（14日）が返る
+RES=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"taro@example.com","password":"Password1"}')
+ACCESS=$(echo "$RES" | jq -r .accessToken)
+REFRESH=$(echo "$RES" | jq -r .refreshToken)
 
 # 現在のユーザー（200）
-curl -i "$BASE/auth/me" -H "Authorization: Bearer $TOKEN"
+curl -i "$BASE/auth/me" -H "Authorization: Bearer $ACCESS"
+
+# トークン再発行（200）。リフレッシュトークンも新しい値に差し替わる
+RES2=$(curl -s -X POST "$BASE/auth/refresh" -H 'Content-Type: application/json' \
+  -d "{\"refreshToken\":\"$REFRESH\"}")
+ACCESS=$(echo "$RES2" | jq -r .accessToken)
+REFRESH=$(echo "$RES2" | jq -r .refreshToken)   # ← 必ず保存し直す
+
+# ログアウト（204）。リフレッシュトークンが失効する
+curl -i -X POST "$BASE/auth/logout" -H "Authorization: Bearer $ACCESS"
 ```
+
+> **リフレッシュトークンは1回で使い捨て（ローテーション）。** 上で `REFRESH` を上書きしているのはそのため。古い値をもう一度使うと**盗用とみなされ、そのログインのトークンがすべて失効します**（＝再ログインが必要になる）。
 
 フロントエンド実装後は、ブラウザで http://localhost:5173 を開きます。
 

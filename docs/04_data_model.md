@@ -19,6 +19,7 @@ erDiagram
     posts ||--o{ likes : "いいねが付く"
     posts ||--o{ post_images : "画像が付く"
     post_images }o--|| stored_files : "実体を参照する"
+    users ||--o{ refresh_tokens : "ログインする"
 
     users {
         bigserial id PK
@@ -81,6 +82,16 @@ erDiagram
         integer width "NULL"
         integer height "NULL"
         bigint uploaded_by FK "NOT NULL"
+        timestamptz created_at "NOT NULL"
+    }
+    refresh_tokens {
+        bigserial id PK
+        bigint user_id FK "NOT NULL"
+        char token_hash UK "NOT NULL SHA-256"
+        uuid family_id "NOT NULL 盗用検知の単位"
+        timestamptz expires_at "NOT NULL"
+        timestamptz used_at "NULL ローテーション済み"
+        timestamptz revoked_at "NULL 失効"
         timestamptz created_at "NOT NULL"
     }
 ```
@@ -294,6 +305,49 @@ erDiagram
 | CHECK | `size_bytes > 0` |
 
 > **このテーブルが画像ストレージ抽象化の要**。設計判断⑤参照。詳細は [07_architecture.md](07_architecture.md)。
+
+---
+
+### 2.8 `refresh_tokens` — リフレッシュトークン
+
+**後から追加したテーブル**（[09_decision_log.md](09_decision_log.md) D-29 / マイグレーション `V2`）。アクセストークン（JWT）は失効させられないため、長命なセッションはこのテーブルで管理する。
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| `id` | `BIGSERIAL` | PK | |
+| `user_id` | `BIGINT` | NOT NULL, FK → `users(id)` | 持ち主 |
+| `token_hash` | `CHAR(64)` | NOT NULL, UNIQUE | **SHA-256ハッシュ（16進64桁）。生のトークンは保存しない** |
+| `family_id` | `UUID` | NOT NULL | 盗用検知の単位。ログイン1回で1つ発行し、ローテーション時も引き継ぐ |
+| `expires_at` | `TIMESTAMPTZ` | NOT NULL | 発行から14日後 |
+| `used_at` | `TIMESTAMPTZ` | | ローテーションで使用済みになった時刻。**NULLなら未使用** |
+| `revoked_at` | `TIMESTAMPTZ` | | 失効時刻（ログアウト / 盗用検知）。**NULLなら有効** |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT `now()` | |
+
+**インデックス**
+
+| 種類 | 対象 | 用途 |
+|---|---|---|
+| UNIQUE | `token_hash` | 提示されたトークンから行を1件特定する |
+| INDEX | `family_id` | 盗用検知時のファミリー一括失効 |
+| INDEX | `user_id` | ログアウト時の全失効、期限切れ行の掃除 |
+
+**このテーブルは他と設計方針が異なる**
+
+| # | 違い |
+|---|---|
+| 1 | **論理削除（`deleted_at`）を使わない。** 状態は `used_at` / `revoked_at` の2つで表す。したがって [D-25](09_decision_log.md) の「全クエリに `deleted_at IS NULL` を付ける」ルールは**このテーブルには適用しない** |
+| 2 | **取得時に「有効な行だけ」を絞り込まない。** 使用済み・失効済みも含めて引く。使用済みトークンの再提示を盗用として検知するには、除外せずに状態を見る必要があるため |
+| 3 | **状態判定はサービス層で行う。** SQLは「ハッシュで1件引く」だけに徹する |
+
+**使用済みへの更新は `WHERE used_at IS NULL` を必ず付ける**
+
+```sql
+UPDATE refresh_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL
+```
+
+同じトークンで同時に2回リフレッシュされても、更新できるのは片方だけになる（行ロックで直列化され、負けた側は更新0件）。**アプリ側の `if` 文で防ごうとするとTOCTOU競合をすり抜ける。**
+
+> **期限切れ行の掃除はMVPでは行わない。** 行は溜まり続けるが、学習用途の規模では問題にならない。定期削除はPhase3で検討する（[09_decision_log.md](09_decision_log.md) D-16 と同じ扱い）。
 
 ---
 
@@ -829,22 +883,25 @@ WHERE follower_id = :me AND followee_id = ANY(:userIds);
 ```
 src/main/resources/db/migration/
 ├─ V1__create_users.sql            ← 作成済み（認証実装時）
-├─ V2__create_stored_files.sql
-├─ V3__create_posts.sql
-├─ V4__create_comments.sql
-├─ V5__create_likes.sql
-├─ V6__create_follows.sql
-├─ V7__create_post_images.sql
-├─ V8__create_indexes.sql          MVPで必要なインデックス（4章 ①〜⑦）
-└─ V9__insert_seed_data.sql        （開発環境のみ）
+├─ V2__create_refresh_tokens.sql   ← 作成済み（リフレッシュトークン導入時。D-29）
+├─ V3__create_stored_files.sql
+├─ V4__create_posts.sql
+├─ V5__create_comments.sql
+├─ V6__create_likes.sql
+├─ V7__create_follows.sql
+├─ V8__create_post_images.sql
+├─ V9__create_indexes.sql          MVPで必要なインデックス（4章 ①〜⑦）
+└─ V10__insert_seed_data.sql       （開発環境のみ）
 
 ── ここまでMVP / ここからPhase2 ──────────────
 
-├─ V10__add_user_search_prefix_index.sql   4章 ⑧（前方一致・6.2）
-└─ V11__add_user_search_trgm_index.sql     4章 ⑨（pg_trgm・6.3）
+├─ V11__add_user_search_prefix_index.sql   4章 ⑧（前方一致・6.2）
+└─ V12__add_user_search_trgm_index.sql     4章 ⑨（pg_trgm・6.3）
 ```
 
-> **ユーザー検索のインデックスを `V8` に含めない。** 検索はPhase2であり、段階式で導入する（6.4）。**適用済みマイグレーションは編集しない**という規約があるため、後から `V8` に追記することはできない。段階ごとに新しいバージョンを切る。
+> **`V2` が `refresh_tokens` になったため、以降の番号を1つずつ繰り下げた。** 当初の計画では `V2` が `stored_files` だった。**適用済みの `V1` / `V2` は編集しない**（規約どおり）。未作成のものは番号を変えて問題ない。
+
+> **ユーザー検索のインデックスを `V9` に含めない。** 検索はPhase2であり、段階式で導入する（6.4）。**適用済みマイグレーションは編集しない**という規約があるため、後から `V9` に追記することはできない。段階ごとに新しいバージョンを切る。
 
 > **`CREATE EXTENSION pg_trgm` の権限について**: `pg_trgm` はPostgreSQL 13以降で **trusted extension** に分類されており、対象DBへの `CREATE` 権限があれば通常のユーザーでも実行できる。本アプリはPostgreSQL 16を前提とする（[07_architecture.md](07_architecture.md) 6.2）ため、**Flywayの実行ユーザーがスーパーユーザーである必要はない**。RDSに載せる場合も同様。
 
@@ -857,7 +914,9 @@ users → stored_files → posts → comments / likes / post_images
 ```
 
 > `users.avatar_file_id` → `stored_files` と、`stored_files.uploaded_by` → `users` が**相互参照**になっている。
-> `V1` で `users` を作る際は `avatar_file_id` のFK制約を付けず、`V2` で `stored_files` を作った後に `ALTER TABLE users ADD CONSTRAINT ...` で追加する。
+> `V1` で `users` を作る際は `avatar_file_id` のFK制約を付けず、`V3` で `stored_files` を作った後に `ALTER TABLE users ADD CONSTRAINT ...` で追加する。
+
+> **`V1__create_users.sql` のコメントは「V2 で stored_files を作った後に」と書いてある**（作成当時の計画のまま）。実際は `V3` になったが、**適用済みマイグレーションは編集しない**規約のためそのままにしている。正はこの表。
 
 **規約**
 
@@ -901,6 +960,7 @@ users → stored_files → posts → comments / likes / post_images
 | `follows` | F-FL-01〜04, F-TL-02, F-US-01, F-US-02 |
 | `post_images` | F-PO-02, F-IM-01, F-IM-02 |
 | `stored_files` | F-IM-01, F-IM-02, F-IM-03, F-US-04 |
+| `refresh_tokens` | F-AU-01, F-AU-02, F-AU-03, F-AU-06 |
 
 ---
 

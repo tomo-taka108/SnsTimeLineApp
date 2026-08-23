@@ -80,9 +80,13 @@ com.example.snstimeline
 │   ├─ CorsConfig.java             CORS設定
 │   └─ StorageConfig.java          FileStorageService の Bean 定義
 ├─ auth
-│   ├─ AuthController.java         #1〜#4
+│   ├─ AuthController.java         #1〜#4, #27, #28
 │   ├─ AuthService.java
-│   ├─ JwtTokenProvider.java       JWTの生成と検証
+│   ├─ JwtTokenProvider.java       アクセストークン（JWT）の生成と検証
+│   ├─ RefreshTokenService.java    リフレッシュトークンの発行・ローテーション・失効
+│   ├─ RefreshTokenRevoker.java    盗用検知時の失効を別トランザクションで確定させる
+│   ├─ RefreshTokenMapper.java     MyBatis の @Mapper
+│   ├─ RefreshToken.java           ドメインモデル（record）
 │   ├─ JwtAuthenticationFilter.java
 │   └─ dto/
 ├─ user
@@ -237,7 +241,9 @@ flowchart LR
 | 署名アルゴリズム | HS256（共通鍵）。**`alg: none` と HS256 以外を拒否する** |
 | 秘密鍵 | 環境変数 `JWT_SECRET` から読む。**ソースコードにハードコードしない**。32バイト未満なら**起動を失敗させる** |
 | ペイロード | `sub`（ユーザーID）、`iat`、`exp`。**メールアドレスは入れない** |
-| 有効期限 | 24時間 |
+| 有効期限 | **アクセストークン15分 / リフレッシュトークン14日**（[09_decision_log.md](09_decision_log.md) D-29） |
+| リフレッシュ | **行う。** 不透明トークンをDBに（SHA-256ハッシュで）保存し、1回で使い捨てる（ローテーション）。使用済みの再提示は盗用とみなしファミリー全体を失効させる |
+| 失効管理 | アクセストークンは**不可**（ステートレス）。リフレッシュトークンは**可能**（ログアウト・盗用検知） |
 | 保管場所（クライアント） | `localStorage`（[06_non_functional.md](06_non_functional.md) で比較、[09_decision_log.md](09_decision_log.md) D-07に記録） |
 
 **セッションを持たない。** `SessionCreationPolicy.STATELESS` を設定する。
@@ -277,7 +283,8 @@ if (!post.userId().equals(currentUserId)) {
 | `DB_USERNAME` | `snsapp` | |
 | `DB_PASSWORD` | — | **リポジトリにコミットしない** |
 | `JWT_SECRET` | — | 32バイト以上のランダム文字列。**コミットしない** |
-| `JWT_EXPIRATION_HOURS` | `24` | トークン有効期限 |
+| `JWT_ACCESS_EXPIRATION_MINUTES` | `15` | アクセストークン有効期限（分） |
+| `JWT_REFRESH_EXPIRATION_DAYS` | `14` | リフレッシュトークン有効期限（日） |
 | `APP_STORAGE_TYPE` | `LOCAL` | `LOCAL` / `S3` |
 | `APP_STORAGE_LOCAL_PATH` | `./uploads` | ローカル保存先 |
 | `APP_UPLOAD_MAX_SIZE_MB` | `5` | 1ファイルの上限 |
@@ -367,15 +374,32 @@ SnsTimeLineApp/
 
 ### 401時の共通処理（F-CO-02）
 
+**リフレッシュトークン導入により、401は「即ログアウト」ではなく「まず再発行を試みる」に変わった**（[09_decision_log.md](09_decision_log.md) D-29）。
+
 ```
 APIラッパーで全レスポンスを監視
   ↓ 401を受信
-localStorage からJWTを削除
-  ↓
-認証Contextをクリア
-  ↓
-SC-01 ログイン画面へ遷移 + トースト「セッションの有効期限が切れました」
+localStorage のリフレッシュトークンで POST /auth/refresh
+  ├─ 成功 → 新しい2つのトークンを保存し直し、元のリクエストを1回だけ再試行
+  │          （ユーザーには何も見えない）
+  └─ 失敗（401） → 両方のトークンを削除
+                     ↓
+                   認証Contextをクリア
+                     ↓
+                   SC-01 ログイン画面へ遷移
+                     + トースト「セッションの有効期限が切れました」
 ```
+
+**実装上の注意**
+
+| # | 内容 |
+|---|---|
+| 1 | **再試行は1回だけ。** 再試行したリクエストがまた401を返しても、再度リフレッシュしない（無限ループ防止） |
+| 2 | **同時に複数のAPIが401になったとき、リフレッシュは1回にまとめる。** 各リクエストが個別にリフレッシュすると、ローテーションにより2回目以降が「使用済みトークンの再提示」＝**盗用と誤検知され、強制ログアウトになる**。進行中のリフレッシュを共有し、完了を待たせる（Promiseを1つ保持する等） |
+| 3 | `POST /auth/refresh` 自体が401を返した場合は、この処理を再帰的に適用しない |
+| 4 | **返ってきた `refreshToken` を必ず保存し直す**（ローテーションのため、古い値は使用済みになっている） |
+
+> **#2 は実装漏れしやすく、症状が「たまに勝手にログアウトする」という分かりにくい形で出る。** 画面表示直後に複数のAPIを並行で呼ぶ設計だと踏みやすい。
 
 **各画面で個別に401を処理しない。** 1箇所に集約する。
 

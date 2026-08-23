@@ -121,7 +121,7 @@
 <header>
   <p class="eyebrow">SnsTimeLineApp · 学習メモ</p>
   <h1>JWT認証の仕組み — 概念から実装ファイルまで</h1>
-  <p class="lede">「一度ログインしたら、次からなぜパスワード不要で通れるのか」。その裏側を、概念 → 採用理由 → リスク対策 → 実際に書いたファイル、の順にたどります。認証バックエンド実装（2026-08-23）時点の内容です。</p>
+  <p class="lede">「一度ログインしたら、次からなぜパスワード不要で通れるのか」。その裏側を、概念 → 採用理由 → リスク対策 → 実際に書いたファイル、の順にたどります。認証バックエンド実装（2026-08-23。アクセストークン＋リフレッシュトークン方式）時点の内容です。</p>
 </header>
 
 <div class="toc">
@@ -159,27 +159,43 @@
 <span class="pmark">[3]</span>              サーバーの秘密鍵で計算した封印。改ざんを検出する</pre>
 
 <div class="note"><span>⚠️</span><div><b>[2] ペイロードは暗号化されていません。</b> Base64というただの変換なので、誰でもデコードして読めます。だから<b>メールアドレスや個人情報を入れてはいけません</b>。今回入れているのは <code>sub</code>（ユーザーID）だけです。<br>署名が守るのは「秘密性」ではなく<b>「改ざんされていないこと」</b>です。<code>sub</code> を 1 → 2 に書き換えても、署名が合わなくなるので即座にバレます。</div></div>
-
 <div class="cols">
   <div class="col">
-    <h4>🎫 アクセストークン <span class="tag tag-core">今回採用</span></h4>
+    <h4>🎫 アクセストークン <span class="tag tag-core">採用</span></h4>
     <ul>
       <li>APIを叩くときに毎回見せる券</li>
-      <li>短命にするのが定石（数分〜数時間）</li>
-      <li><b>今回はこれ1種類のみ。有効期限24時間</b></li>
+      <li>中身はここまで説明してきた<b>JWT</b></li>
+      <li><b>有効期限15分</b>と短命</li>
+      <li><b>失効させられない</b>（サーバーは何も覚えていないため）</li>
     </ul>
   </div>
   <div class="col">
-    <h4>♻️ リフレッシュトークン <span class="tag tag-sub">今回は不採用</span></h4>
+    <h4>♻️ リフレッシュトークン <span class="tag tag-core">採用</span></h4>
     <ul>
       <li>アクセストークンが切れたとき、<b>再ログインせずに新しい券をもらう</b>ための引換券</li>
-      <li>長命（数週間）だが、用途が「更新」だけなので漏れても被害を限定しやすい</li>
-      <li>導入すると失効管理用のDBテーブル等が必要になる</li>
+      <li><b>JWTではない。</b> ただのランダムな文字列で、実体はDBの1行</li>
+      <li><b>有効期限14日</b>と長命</li>
+      <li><b>失効させられる</b>（DBに状態があるため）</li>
     </ul>
   </div>
 </div>
 
-<div class="note key"><span>🔑</span><div><b>なぜ今回リフレッシュトークンを使わないのか。</b> 2種類のトークンを使う目的は「アクセストークンを短命にしつつ、ユーザーが頻繁に再ログインせずに済むようにする」ことです。今回は<b>学習用アプリで、期限切れ＝再ログインで許容できる</b>と判断し、仕組みを増やさない選択をしました（24時間の一本勝負）。</div></div>
+<div class="note key"><span>🔑</span><div><b>なぜ2種類に分けるのか。</b> 1種類だと<b>どちらに倒しても損をする</b>からです。<br>
+・期限を長くする（例：24時間）→ 漏れたトークンが<b>24時間使い放題</b>。JWTは失効させられないので止める手段がない<br>
+・期限を短くする（例：15分）→ <b>15分ごとに再ログイン</b>。使い物にならない<br>
+2種類に分けると、この板挟みが解けます。<b>「頻繁に飛ぶものほど短命に、失効できるものほど長命に」</b>——これが要点です。</div></div>
+
+<div class="note"><span>⚠️</span><div><b>リフレッシュトークンをJWTにしてはいけません。</b> JWTにすると「発行したら失効できない」という弱点を、<b>長命な側にも持ち込む</b>ことになり、分けた意味がなくなります。今回はランダムな文字列（不透明トークン）にして、DBで状態を管理しています。</div></div>
+
+<h3 style="margin-top:26px">使い捨て（ローテーション）と盗用検知</h3>
+
+<p><b>リフレッシュトークンは1回使ったら捨てます。</b> 再発行するたびに新しい引換券が返ってくるので、クライアントは古い値を保存し直す必要があります。</p>
+
+<div class="note key"><span>🔑</span><div><b>なぜわざわざ使い捨てにするのか。それは「盗まれたことに気づくため」です。</b><br>
+正常な利用者は、1枚の引換券を2回使いません。<b>2回目が来たということは、券が漏れていて、攻撃者と本人の両方が使っている</b>可能性が高い。<br>
+このとき<b>どちらが攻撃者か判別できない</b>ので、そのログインに紐づく券をすべて無効にして、<b>両方に再ログインを強制</b>します（安全側に倒す）。</div></div>
+
+<p>この「そのログインに紐づく券の集まり」を<b>ファミリー</b>と呼び、DBの <code>family_id</code> で管理します。ログイン1回につき1ファミリー。使い捨てで新しい券を発行しても <code>family_id</code> は引き継ぐので、連鎖をまとめて追跡できます。<b>別の端末でのログインは別ファミリーなので、巻き込まれません。</b></p>
 
 <h2 id="s2"><span class="num">2</span>セッション方式との違い・採用理由</h2>
 <p class="h2sub">「サーバーが覚えておく」か「札に書いておく」か、が根本的な差です。</p>
@@ -190,14 +206,16 @@
   <tr><td><b>ログイン情報の置き場</b></td><td><b>サーバー側</b>のメモリやDBに保存。利用者には引換番号だけ渡す</td><td><b>トークンの中</b>に書いてある。サーバーは何も覚えない</td></tr>
   <tr><td><b>サーバーの状態</b></td><td>ステートフル（覚えている）</td><td><b>ステートレス</b>（覚えていない）</td></tr>
   <tr><td><b>サーバーを増やすとき</b></td><td class="ng">全台でセッションを共有する仕組みが要る</td><td class="ok">何もいらない。どの台でも検証できる</td></tr>
-  <tr><td><b>強制ログアウト</b></td><td class="ok">サーバー側で消せば即座に無効</td><td class="ng"><b>できない。</b>期限切れまで有効なまま</td></tr>
+  <tr><td><b>強制ログアウト</b></td><td class="ok">サーバー側で消せば即座に無効</td><td><b>アクセストークンは不可</b>（最大15分残る）。<b>リフレッシュトークンは可能</b>（DBで失効させられる）</td></tr>
   <tr><td><b>別ドメイン間の利用</b></td><td>Cookieの設定が複雑になりがち</td><td class="ok">ヘッダーで送るだけなので単純</td></tr>
 </table>
 </div>
 
-<div class="note key"><span>🔑</span><div><b>今回JWTを採用した決め手。</b> このアプリはフロント（:5173）とバックエンド（:8080）が<b>別々に動く構成</b>です。この形だとCookieを使うセッション方式は設定が煩雑になります。加えて、将来サーバーを複数台に増やしても<b>セッション共有の仕組みが不要</b>という利点が、学習題材として分かりやすい。<br>代償として「強制ログアウトができない」を受け入れています。<b>これは欠点ではなく、意図した取引です。</b></div></div>
+<div class="note key"><span>🔑</span><div><b>今回JWTを採用した決め手。</b> このアプリはフロント（:5173）とバックエンド（:8080）が<b>別々に動く構成</b>です。この形だとCookieを使うセッション方式は設定が煩雑になります。加えて、将来サーバーを複数台に増やしても<b>セッション共有の仕組みが不要</b>という利点が、学習題材として分かりやすい。<br>代償として「発行済みのアクセストークンは取り消せない」を受け入れています。<b>これは欠点ではなく、意図した取引です。</b> だからこそ有効期限を15分と短くして、取り消せない時間を狭めています。</div></div>
 
-<div class="note"><span>🚪</span><div><b>ログアウトはどう実現しているか。</b> サーバーは何も覚えていないので、<b>ブラウザ側でトークンを捨てるだけ</b>です。サーバーへの通信は発生しません。「ログアウトAPI」が存在しないのはこのためです。</div></div>
+<div class="note"><span>🚪</span><div><b>ログアウトはどう実現しているか。</b> <code>POST /auth/logout</code> で<b>サーバーにリフレッシュトークンの失効を伝えます</b>。あわせてブラウザ側でも両方のトークンを捨てます。<br>
+<b>ただし、発行済みのアクセストークンは無効にできません</b>（最大15分間は使えてしまう）。サーバー側の失効は「<b>これ以上セッションを延長させない</b>」ための措置です。<br>
+<span class="tag tag-sub">補足</span> 設計当初は「ログアウトはブラウザ側でトークンを捨てるだけ、サーバー通信なし」でしたが、リフレッシュトークン導入に伴い<b>ログアウトAPIを追加</b>しました。</div></div>
 
 <h2 id="s3"><span class="num">3</span>リスクと、今回打った対策</h2>
 <p class="h2sub">JWTは「正しく使えば安全」ですが、典型的な落とし穴がいくつかあります。</p>
@@ -224,9 +242,21 @@
   <p>今回はブラウザの <code>localStorage</code> に保管する方針です。これは<b>JavaScriptから読めてしまう</b>ため、XSS（悪意あるスクリプトの混入）が起きると盗まれます。</p>
   <p><b>対策：</b>Reactの標準的な書き方を守り、<code>dangerouslySetInnerHTML</code> を使わない等でXSS自体を起こさない。<br><span style="color:var(--ink-faint)">※実務では httpOnly Cookie ＋ CSRF対策 が推奨されます。今回は学習用途での割り切りです。</span></p>
 </div>
+<div class="card">
+  <h3>⑤ リフレッシュトークンが盗まれる <span class="tag tag-core">重要</span></h3>
+  <p>引換券は14日と長命なので、盗まれると長期間なりすまされます。今回は<b>3段構え</b>で守っています。</p>
+  <table style="margin-top:10px">
+    <tr><th>対策</th><th>効果</th></tr>
+    <tr><td><b>DBにはSHA-256ハッシュだけ保存</b></td><td>DBが漏れても、その値をそのまま提示しても通らない</td></tr>
+    <tr><td><b>1回で使い捨て（ローテーション）</b></td><td>盗まれた券が後から使われたことを<b>検知できる</b></td></tr>
+    <tr><td><b>再利用されたらファミリー全体を失効</b></td><td>攻撃者・本人の両方を締め出し、再ログインを強制する</td></tr>
+  </table>
+  <p style="margin-top:10px"><b>なぜBCryptではなくSHA-256なのか。</b> パスワードは人間が考えるので推測されやすく、だからこそ<b>わざと計算を遅くする</b>BCryptで総当たりを困難にします。一方リフレッシュトークンは<b>プログラムが作ったランダムな256bit</b>なので、そもそも総当たりが成立しません。遅くする必要がないのでSHA-256で十分です。</p>
+</div>
+
 
 <div class="card">
-  <h3>⑤ ログイン失敗メッセージから、登録済みメールが分かる</h3>
+  <h3>⑥ ログイン失敗メッセージから、登録済みメールが分かる</h3>
   <p>「そのメールは登録されていません」と返すと、攻撃者が<b>どのメールアドレスが会員か調べられます</b>（アカウント列挙）。</p>
   <p><b>対策：</b>パスワード間違いも未登録も<b>まったく同じ応答</b>を返す。実際に2つの応答を比較し、1文字も違わないことを確認済み。</p>
 </div>
@@ -234,7 +264,7 @@
 <div class="note"><span>🔒</span><div><b>パスワード自体の守り方（JWTとは別の話）。</b> DBには <code>$2a$10$...</code> というBCryptで変換した文字列だけを保存します。元に戻せないため、<b>DBが漏れてもパスワードは分かりません</b>。ログイン時は「入力値を同じ方法で変換して一致するか」で判定します。</div></div>
 
 <h2 id="s4"><span class="num">4</span>実装したファイルの地図</h2>
-<p class="h2sub">全29ファイルありますが、<b>認証の主役は8つだけ</b>。残りは土台と、今後も使い回す共通部品です。</p>
+<p class="h2sub">全40ファイルありますが、<b>認証の主役は12個だけ</b>。残りは土台と、今後も使い回す共通部品です。</p>
 
 <div class="tscroll">
 <table>
@@ -242,8 +272,14 @@
   <tr><td rowspan="4"><b>認証の中核</b><br><span style="font-size:12px;color:var(--ink-faint)">auth/</span></td>
       <td><code>AuthController</code></td><td>HTTPの入口。「どのURLが来たか」だけを担当</td></tr>
   <tr><td><code>AuthService</code></td><td><b>頭脳。</b>登録・ログインの判断はすべてここ</td></tr>
-  <tr><td><code>JwtTokenProvider</code></td><td>入場券を<b>作る・検証する</b>係</td></tr>
+  <tr><td><code>JwtTokenProvider</code></td><td>入場券（JWT）を<b>作る・検証する</b>係</td></tr>
   <tr><td><code>JwtAuthenticationFilter</code></td><td><b>門番。</b>毎回のリクエストで入場券を確認する</td></tr>
+
+  <tr><td rowspan="4"><b>リフレッシュ<br>トークン</b><br><span style="font-size:12px;color:var(--ink-faint)">auth/</span></td>
+      <td><code>RefreshTokenService</code></td><td><b>引換券の心臓部。</b>発行・使い捨て・盗用検知はすべてここ</td></tr>
+  <tr><td><code>RefreshTokenRevoker</code></td><td>盗用検知の失効を<b>確実にDBへ残す</b>ための小さな部品（後述の「罠」参照）</td></tr>
+  <tr><td><code>RefreshToken</code></td><td>DBの1行に対応する箱（ハッシュ・family_id・各種日時）</td></tr>
+  <tr><td><code>RefreshTokenMapper</code> ＋ <code>.xml</code></td><td>refresh_tokens テーブルへのSQL</td></tr>
 
   <tr><td rowspan="2"><b>エラー応答</b><br><span style="font-size:12px;color:var(--ink-faint)">auth/</span></td>
       <td><code>AuthEntryPoint</code></td><td>未ログイン時の <b>401</b> をJSONで返す</td></tr>
@@ -259,13 +295,14 @@
   <tr><td><code>UserSummary</code></td><td><b>外に見せてよい情報だけ</b>を詰め直した箱</td></tr>
 
   <tr><td rowspan="4"><b>共通部品</b><br><span style="font-size:12px;color:var(--ink-faint)">common/</span></td>
-      <td><code>ErrorCode</code></td><td>エラーの種類一覧（11種）</td></tr>
+      <td><code>ErrorCode</code></td><td>エラーの種類一覧（12種）</td></tr>
   <tr><td><code>GlobalExceptionHandler</code></td><td>エラーを<b>全部同じ形のJSON</b>に整える</td></tr>
   <tr><td><code>TrimDeserializer</code></td><td>入力の前後の空白を自動で除去</td></tr>
   <tr><td><code>CodePointLength</code></td><td>文字数を数える（絵文字を1文字扱い）</td></tr>
 
-  <tr><td rowspan="2"><b>土台</b></td>
+  <tr><td rowspan="3"><b>土台</b></td>
       <td><code>V1__create_users.sql</code></td><td>usersテーブルを作る（Flyway）</td></tr>
+  <tr><td><code>V2__create_refresh_tokens.sql</code></td><td>refresh_tokensテーブルを作る（Flyway）</td></tr>
   <tr><td><code>application.yml</code></td><td>DB接続先・JWT設定などの設定値</td></tr>
 </table>
 </div>
@@ -313,24 +350,54 @@
   <div class="step">
     <div class="rail"><div class="dot">5</div><div class="line"></div></div>
     <div class="stepbody">
-      <h3>入場券を発行して返す</h3>
-      <p>ユーザーIDを封印したJWTを作成。<code>{"token":"eyJ...", "user":{...}}</code> の形で返します。<b>emailは含めません。</b></p>
-      <div class="chips"><span class="chip file">JwtTokenProvider</span><span class="chip file">UserSummary</span></div>
+      <h3>2種類の券を発行して返す</h3>
+      <p>ユーザーIDを封印した<b>JWT（15分）</b>と、ランダムな<b>引換券（14日）</b>を作成。引換券は<b>SHA-256で変換した値だけをDBに保存</b>し、生の値は返した後サーバーに残しません。</p>
+      <p class="mono" style="font-size:13px">{"accessToken":"eyJ...", "refreshToken":"vxThD...", "expiresIn":900, "user":{...}}</p>
+      <div class="chips"><span class="chip file">JwtTokenProvider</span><span class="chip file">RefreshTokenService</span><span class="chip file">UserSummary</span></div>
     </div>
   </div>
   <div class="step">
-    <div class="rail"><div class="dot">6</div></div>
+    <div class="rail"><div class="dot">6</div><div class="line"></div></div>
     <div class="stepbody">
       <h3>【以降】入場券を見せて通る</h3>
       <p><code>Authorization: Bearer eyJ...</code> をヘッダーに付けてリクエスト。<b>門番</b>が封印を検証し、問題なければユーザーIDを取り出して通します。<b>ここでDBは引きません</b>（署名が正しければ中身は信用できるため）。</p>
       <div class="chips"><span class="chip file">JwtAuthenticationFilter</span><span class="chip file">AuthPrincipal</span></div>
     </div>
   </div>
+  <div class="step">
+    <div class="rail"><div class="dot">7</div></div>
+    <div class="stepbody">
+      <h3>【15分後】入場券が切れたら、引換券で新しくもらう</h3>
+      <p>401が返ってきたら、フロントは<b>裏で</b> <code>POST /auth/refresh</code> を呼び、新しい2枚を受け取って元の処理をやり直します。<b>ユーザーには何も見えません。</b></p>
+      <p>サーバー側では ①ハッシュ化して行を探す → ②使用済み／失効済み／期限切れでないか確認 → ③<b>使用済みにする</b> → ④新しい引換券を発行、という順で処理します。</p>
+      <div class="chips"><span class="chip file">RefreshTokenService</span><span class="chip file">RefreshTokenMapper.xml</span></div>
+    </div>
+  </div>
 </div>
+
+<div class="note key"><span>🔑</span><div><b>この流れで一番大事なのは、5番と7番でDBに残るものの違いです。</b><br>
+JWT（入場券）は<b>DBに一切残りません</b>。だから失効させられない。<br>
+引換券は<b>DBの1行として残ります</b>（ただしハッシュ化された姿で）。だから失効させられる。<br>
+「失効できる／できない」の差は、<b>どこに実体があるか</b>の差です。</div></div>
 
 <h2 id="s6"><span class="num">6</span>つまずきポイント集</h2>
 <p class="h2sub">実装中に実際にハマった／設計書が警告していた箇所。次に認証を書くときの備忘。</p>
 
+
+<div class="card">
+  <h3>失効させたはずなのに、無効にならない <span class="tag tag-core">今回ハマった</span></h3>
+  <p>盗用を検知したとき、処理は「<b>①ファミリーを失効させる → ②401エラーを投げる</b>」という順になります。ところが Spring では、<b>エラーを投げるとその処理でDBに書いた内容が丸ごと取り消される</b>（ロールバック）仕組みがあります。</p>
+  <p>結果、<b>ログには「失効させました」と出るのに、DBは何も変わっていない</b>という状態になっていました。検証で「一括失効したはずの引換券がまだ使える」ことに気づいて発覚。</p>
+  <p><b>対策：</b>失効処理だけを別のクラス（<code>RefreshTokenRevoker</code>）に切り出し、<b>独立した処理として先に確定させる</b>（<code>REQUIRES_NEW</code>）ようにしました。</p>
+  <p><b>さらに注意：</b>この設定は<b>同じクラス内のメソッドを呼んでも効きません</b>。Springは「外から呼ばれたとき」に割り込む仕組みで動くためです。<b>わざわざ別クラスにしているのはこれが理由</b>で、1つのクラスにまとめると静かに壊れます。</p>
+</div>
+
+<div class="card">
+  <h3>たまに勝手にログアウトされる（フロント実装時の注意） <span class="tag tag-sub">これから踏む</span></h3>
+  <p>画面を開いた直後に<b>複数のAPIを同時に呼ぶ</b>と、それらが揃って401になることがあります。このとき各リクエストが<b>それぞれ勝手に再発行を試みる</b>と、2つ目以降は「使用済みの引換券を出した」ことになり——<b>盗用と誤検知されて強制ログアウト</b>になります。</p>
+  <p><b>対策：</b>再発行の処理は<b>1回にまとめ</b>、他のリクエストはその完了を待つようにする。</p>
+  <p>症状が「<b>たまに</b>勝手にログアウトする」という分かりにくい形で出るので、先に知っておくと助かるはずです。</p>
+</div>
 <div class="card">
   <h3>401が「本文が空っぽ」で返ってしまう <span class="tag tag-core">要注意</span></h3>
   <p>エラーを統一形式に整える <code>GlobalExceptionHandler</code> は、<b>401 / 403 を捕まえられません</b>。認証エラーは<b>門番の段階</b>で起きるため、そこまで処理が到達しないからです。</p>
@@ -366,7 +433,7 @@ WHERE email = #{email} AND &lt;include refid="activeOnly"/&gt;   <b>← 使い�
 </div>
 
 <footer>
-  <p>SnsTimeLineApp 学習メモ · 2026-08-23（認証バックエンド実装時点）</p>
+  <p>SnsTimeLineApp 学習メモ · 2026-08-23（認証バックエンド実装時点・リフレッシュトークン対応版）</p>
   <p>正式な設計根拠は
      <a href="../06_non_functional.md">06_non_functional.md</a>（セキュリティ要件）、
      <a href="../05_api_design.md">05_api_design.md</a>（API仕様）、
