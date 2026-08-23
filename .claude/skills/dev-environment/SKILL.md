@@ -16,10 +16,11 @@ IDEからの起動とデバッグを優先するため、**アプリ本体はDoc
 | バックエンド（Spring Boot） | `./mvnw spring-boot:run` | 8080 |
 | フロントエンド（React + Vite） | `npm run dev` | 5173 |
 
-**前提**: JDK 25 / Docker Desktop / Node 20+（フロント着手後）。
+**前提**: JDK 25 / Docker Desktop / Node 20+。
 
-> **`docker-compose.yml` と `backend/` は実装済み。** 上記のうち PostgreSQL とバックエンドの手順はそのまま動く。
-> **`frontend/` はまだ存在しない**ため、`npm run dev` を含む手順は実行できない。雛形を作った時点で本スキルを更新すること。
+> **`docker-compose.yml` / `backend/` / `frontend/` はすべて実装済み。** 上記の手順はそのまま動く。
+> 現時点で動くのは**認証まわりの画面のみ**（新規登録 / ログイン / ログアウト）。
+> `/` は投稿一覧ではなく**仮ページ**（ログイン中ユーザーの表示のみ）。
 
 ## 起動・停止
 
@@ -57,7 +58,7 @@ docker compose up -d
 # 3. バックエンド（起動時にFlywayがマイグレーションを自動実行する）
 cd backend && ./mvnw spring-boot:run
 
-# 4. フロントエンド（別ターミナル）※ frontend/ 未作成のため現時点では実行不可
+# 4. フロントエンド（別ターミナル）
 cd frontend && npm install && npm run dev
 ```
 
@@ -71,7 +72,7 @@ cd frontend && npm install && npm run dev
 > $env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
 > ```
 
-### バックエンド単体の動作確認（フロント未実装のうちはこちら）
+### バックエンド単体の動作確認（curl）
 
 ```bash
 BASE=http://localhost:8080/api/v1
@@ -95,7 +96,7 @@ REFRESH=$(echo "$RES2" | jq -r .refreshToken)
 curl -i -X POST "$BASE/auth/logout" -H "Authorization: Bearer $ACCESS"
 ```
 
-フロント実装後はブラウザで http://localhost:5173 を開く。
+ブラウザで確認する場合は http://localhost:5173 を開く。
 
 ## DBリセット（開発データを初期状態に戻す）
 
@@ -164,6 +165,12 @@ docker compose logs db --tail=50
 - 何が使っているか確認: `netstat -ano | findstr :5432`（PowerShell）
 - **ホストに別のPostgreSQLが動いていると5432が埋まりやすい**
 
+> **5173 が埋まっていると Vite は黙って 5174 にずれる。**
+> `Port 5173 is in use, trying another one...` と出た場合、画面は開けるが
+> **APIリクエストがすべてCORSで失敗する**（バックエンドは 5173 のみ許可しているため）。
+> エラーがCORSの形で出るので原因が分かりにくい。**まず Vite の起動ログでポート番号を確認すること。**
+> 多くは「既に別ターミナルで `npm run dev` が動いている」だけなので、二重起動を疑う。
+
 ### 画像アップロードが失敗する
 
 - 保存先ディレクトリ（`APP_STORAGE_LOCAL_PATH`、既定 `./uploads`）が存在し書き込み可能か確認する
@@ -196,4 +203,66 @@ docker compose exec db psql -U snsapp -d snstimeline
 \dt                    -- テーブル一覧
 \d+ posts              -- テーブル定義の確認
 \di                    -- インデックス一覧
+```
+
+## ブラウザでの動作確認（Chrome DevTools MCP）
+
+**確認の順序**: まず**自分の目でブラウザを操作して確認**し、そのうえで**念のための自動確認**として Chrome DevTools MCP を使う。自動確認だけで済ませない（見た目の違和感は人が見ないと気づけないため）。
+
+`.mcp.json` でプロジェクト単位に設定済み。**このリポジトリでのみ有効**で、他プロジェクトでは別途追加が必要（全プロジェクトで使いたい場合は `--scope user` で追加する）。
+
+```json
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest", "--isolated", "--no-usage-statistics", "--no-performance-crux"]
+    }
+  }
+}
+```
+
+| オプション | 理由 |
+|---|---|
+| `--isolated` | 使い捨てプロファイルで起動する。**普段使いのChromeのログイン情報やCookieに触れない** |
+| `--no-usage-statistics` | Googleへの使用統計の送信を止める |
+| `--no-performance-crux` | パフォーマンス計測時にURLがGoogleのAPIへ送られるのを止める |
+| （`--headless` は付けない） | **動作を目で追えるようにするため**、ブラウザの画面を表示する |
+
+### 初回に必要な操作
+
+プロジェクト単位のMCPは**承認が必要**（`.mcp.json` はリポジトリから来る可能性があるため、勝手には有効にならない安全策）。
+
+```bash
+claude mcp list          # ⏸ Pending approval と出たら未承認
+```
+
+`claude` を起動すると承認を求められるので許可する。承認後は `✔ Connected` になる。
+
+### 使うときの前提
+
+**先にアプリを起動しておくこと。** MCPはブラウザを操作するだけで、サーバーは立ち上げない。
+
+```bash
+docker compose up -d
+cd backend && ./mvnw spring-boot:run    # :8080
+cd frontend && npm run dev              # :5173
+```
+
+### できること
+
+| 用途 | 内容 |
+|---|---|
+| 画面の確認 | スクリーンショット、DOM構造の取得 |
+| 操作 | クリック・入力・遷移 |
+| **コンソール** | エラーログの読み取り |
+| **ネットワーク** | リクエスト／レスポンスの中身の確認（401やCORSの調査に有効） |
+
+> **ログにパスワード・トークンが出ていないことの確認**にも使える（[docs/06_non_functional.md](../../../docs/06_non_functional.md) 5.2）。
+
+### 外すとき
+
+```bash
+claude mcp remove chrome-devtools --scope project
 ```
