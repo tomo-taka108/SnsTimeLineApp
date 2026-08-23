@@ -390,7 +390,7 @@ WHERE p.like_count <> (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id);
 | # | 規約 |
 |---|---|
 | 1 | **リポジトリ層の全クエリに `deleted_at IS NULL` を付与する。** 例外はカウンタ再集計SQLと管理用クエリのみ |
-| 2 | 実現方法はHibernateの `@SQLRestriction("deleted_at is null")` を使う（Hibernate 5系なら `@Where`） |
+| 2 | ~~実現方法はHibernateの `@SQLRestriction("deleted_at is null")` を使う~~ → **MyBatis採用により変更（[09_decision_log.md](09_decision_log.md) D-25）。** Mapper XML に `<sql id="activeOnly">deleted_at IS NULL</sql>` を定義し、各SQLから `<include>` する。意図的に無視するメソッドは名前に `IncludingDeleted` を付ける |
 | 3 | 論理削除済みリソースへのGETは **`404 Not Found`** を返す。`410 Gone` は使わない（存在の有無を漏らさないため） |
 | 4 | 削除処理は `DELETE` 文ではなく `UPDATE ... SET deleted_at = now()` で行う |
 

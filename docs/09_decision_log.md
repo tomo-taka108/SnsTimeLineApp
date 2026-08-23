@@ -454,19 +454,130 @@ XSSリスクを受け入れる代わりに、**XSS自体を起こさない実装
 
 ---
 
+## D-25 O/RマッパーにMyBatisを採用する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-23 |
+| **論点** | DBアクセスに JPA/Hibernate と MyBatis のどちらを使うか |
+| **選択肢** | A. JPA (Hibernate) / **B. MyBatis** |
+| **決定** | **B。MyBatis（`mybatis-spring-boot-starter` 4.1.0）を採用する** |
+| **状態** | 決定済み |
+
+**理由**
+
+1. 発行されるSQLがコードと1対1で対応するため、[06_non_functional.md](06_non_functional.md) 1.3 が求める「タイムライン取得のSQL発行回数は3回以内」「N+1を作らない」を**目で確認しながら実装できる**。学習目的に適う。
+2. 非正規化カウンタのSQL側相対更新（D-01）のような「SQLをそのまま書きたい」要件と相性がよい。
+
+**トレードオフ（受け入れるリスク）**
+
+MyBatis には Hibernate の `@SQLRestriction` に相当する**論理削除の自動除外機能がない**。各SQLに `deleted_at IS NULL` を手で書くことになり、D-02 が警戒していた「1箇所の書き忘れで削除済みレコードが漏れる」リスクは**JPAより高くなる**。対策として以下3つの歯止めを置く。
+
+| # | 歯止め |
+|---|---|
+| 1 | SQLはMapper XMLに集約し、`<sql id="activeOnly">deleted_at IS NULL</sql>` を `<include>` で使い回す（条件を1箇所で管理する） |
+| 2 | 論理削除を意図的に無視するメソッドは名前に `IncludingDeleted` を付け、逸脱が名前で分かるようにする |
+| 3 | レビュー時に `FROM users` を含むSQLに除外条件があるかを機械的に確認する |
+
+**意図的な例外**: 重複チェック（`existsByEmailIncludingDeleted` / `existsByUsernameIncludingDeleted`）は `deleted_at IS NULL` を**付けない**。一意制約が `deleted_at` を絡めない設計＝退会したメール・ユーザー名は再利用させない方針のため、退会済みユーザーも重複として扱うのが正しい（[04_data_model.md](04_data_model.md) 2.1）。
+
+**この決定に伴う撤回**
+
+- **D-02 の「実現方法: Hibernateの `@SQLRestriction`」を撤回する。** 論理削除を採用する方針（`posts` / `comments` / `users` のみ論理削除、`likes` / `follows` は物理削除）自体は**変更しない**。
+- **D-18（論理削除の実現方法）を決着させる。** MyBatis には自動除外機構が存在しないため、選択肢のうち「明示的なリポジトリメソッド」側に確定する。
+
+**影響範囲**: [04_data_model.md](04_data_model.md) 3.2 / [06_non_functional.md](06_non_functional.md) 3.7 / [07_architecture.md](07_architecture.md) 2.2
+
+---
+
+## D-26 JWTライブラリに jjwt を採用する（GSON版）
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-23 |
+| **論点** | JWTの生成・検証に使うライブラリ |
+| **選択肢** | **A. jjwt** / B. nimbus-jose-jwt / C. Spring Security OAuth2 Resource Server |
+| **決定** | **A。jjwt 0.12.7。ただし `jjwt-jackson` ではなく `jjwt-gson` を使う** |
+| **状態** | 決定済み |
+
+**理由**
+
+1. [06_non_functional.md](06_non_functional.md) 3.2 が要求する「**`alg: none` を受け入れない**」が、jjwt では**設定ではなく既定の動作**として満たされる。`parseSignedClaims()` はJWSを必須とし、未署名トークンを受け入れるには明示的に `.unsecured()` を呼ぶ必要がある。「安全側が既定」であることが学習用途として重要。
+2. 秘密鍵が256bit未満なら `WeakKeyException` を投げるため、「32バイト以上」の要求も起動時に強制できる。
+3. B案は `JWSVerifier` を自前で組み `alg` を手動検査する必要があり、間違える余地が大きい。C案は対称鍵のトークンにリソースサーバー一式を持ち込むことになり、[07_architecture.md](07_architecture.md) 2.2 が想定する自前の `JwtTokenProvider` 構成と矛盾する。
+
+**GSON版を選ぶ理由**: jjwt は内部シリアライザが Jackson 2 依存で、**Jackson 3 に未対応**（[jwtk/jjwt#1029](https://github.com/jwtk/jjwt/issues/1029)）。Spring Boot 4 の既定は Jackson 3（`tools.jackson`）のため、`jjwt-jackson` を使うと Jackson 2 が混在する。JWTのペイロードは `sub` / `iat` / `exp` のみで GSON に不足はない。
+
+**検証済み**: `alg: none` で細工したトークンを `GET /auth/me` に送り、401 `UNAUTHENTICATED` が返ることを確認した。
+
+---
+
+## D-27 パスワードは前後の空白をトリムしない
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-23 |
+| **論点** | [05_api_design.md](05_api_design.md) 8章「文字列は前後の空白をトリムしてから検証する」をパスワードにも適用するか |
+| **選択肢** | A. 全文字列を一律トリム / **B. パスワードだけ除外する** |
+| **決定** | **B。`email` / `username` / `displayName` はトリムし、`password` はトリムしない** |
+| **状態** | 決定済み |
+
+**理由**
+
+前後の空白も**正当なパスワード文字**である。黙って除去すると、ユーザーが他所（パスワードマネージャ等）で正しく設定したパスワードでログインできなくなる。8章の規約は表示用の文字列を想定したものであり、認証情報には適用しない。
+
+**実装**: トリムは Jackson のデシリアライズ時に行う（`TrimDeserializer`）。「ボディのデシリアライズ→`@Valid`」の順で処理されるため、検証した文字列と保存する文字列が一致する。`WebDataBinder` + `StringTrimmerEditor` はJSONボディに効かないため使わない。
+
+---
+
+## D-28 JDK 25 と Spring Boot 4.1.0 を採用する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-23 |
+| **論点** | 実装に使う JDK と Spring Boot のバージョン |
+| **選択肢** | A. JDK 21 + Spring Boot 3.5.x / **B. JDK 25 + Spring Boot 4.1.0** |
+| **決定** | **B。JDK 25（LTS）+ Spring Boot 4.1.0** |
+| **状態** | 決定済み |
+
+**理由**
+
+1. JDK 25 を使う方針をユーザーが選択した。**Spring Boot 3.5.x は JDK 25 を正式サポート範囲に含めていない**ため、Boot 4.x が事実上の必須となる。
+2. Spring Boot 4.1.0 は Java 17〜26 に対応し、Spring Framework 7.0.8 / Spring Security 7.1.0 / Hibernate 7.4.1 を同梱する。
+
+**設計書からの変更**: [README.md](../README.md) は当初「JDK 21」と記載していた。本決定に伴い README を更新する。
+
+**Boot 3.x からの差分（実装時に効いてくる点）**
+
+| # | Boot 3.x | Boot 4.1 |
+|---|---|---|
+| 1 | `spring-boot-starter-web` | **`spring-boot-starter-webmvc`**（リネーム） |
+| 2 | validation は web starter に同梱 | **`spring-boot-starter-validation` の明示的な追加が必要** |
+| 3 | `flyway-core` の直接依存で自動設定が有効 | **`spring-boot-starter-flyway` が必要** |
+| 4 | Jackson 2（`com.fasterxml.jackson`） | **Jackson 3（`tools.jackson`）が既定**。ただしアノテーションは `com.fasterxml.jackson.annotation` のまま |
+
+**受け入れるリスク**
+
+Web上の Spring Boot 情報の大半は 3.x 向けであり、**詰まったときに参照できる記事が少ない**。実際に以下2件のツール互換性問題が発生した。
+
+- `start.spring.io` のメタデータが MyBatis の対応範囲を `[4.0.0, 4.1.0.M1)` としており、Boot 4.1.0 との組み合わせを生成できなかった。→ Maven Central の POM で `mybatis-spring-boot-starter` 4.1.0 が `spring-boot.version 4.1.0` でビルドされていることを確認し、依存を手動で追加して解決。
+- Spotless 2.44.4 + google-java-format が JDK 25 の javac 内部API変更により `NoSuchMethodError` で失敗。→ Spotless 3.10.0 / google-java-format 1.36.1 へ更新して解決。
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |
 |---|---|---|---|
 | D-16 | 孤児ファイルのクリーンアップ方法 | **保留** | R-03。Phase3で定期バッチを検討。検出クエリは [04_data_model.md](04_data_model.md) 3.5に用意済み |
 | D-17 | レート制限の実装 | **保留** | MVPでは実装しない。候補は [05_api_design.md](05_api_design.md) 8章 |
-| D-18 | 論理削除の実現方法（`@SQLRestriction` vs 明示的なリポジトリメソッド） | **保留** | 実装時にHibernateのバージョンを確認して決める。方針は「全クエリに `deleted_at IS NULL`」で確定 |
+| D-18 | 論理削除の実現方法（`@SQLRestriction` vs 明示的なリポジトリメソッド） | **決定済み → [D-25](#d-25-orマッパーにmybatisを採用する)** | MyBatis採用により `@SQLRestriction` は使えないため「明示的なメソッド」に確定。方針「全クエリに `deleted_at IS NULL`」は変わらない |
 | D-21 | **そもそもAWSでサーバーを構築するか** | **未決** | **S3の利用は決定済み**だが、EC2 / RDS / ALB の構築は未決。構成図は [10_infrastructure.md](10_infrastructure.md) に先行して作成済み |
 | D-22 | 本番想定構成（Multi-AZ）と学習用最小構成のどちらを採るか | **未決** | 構築するなら**まず最小構成**を推奨。[10_infrastructure.md](10_infrastructure.md) 2章 |
 | D-23 | S3移行後の画像配信経路（アプリ経由 / リダイレクト / CloudFront直） | **未決** | **どの案でもDB変更は不要**。[10_infrastructure.md](10_infrastructure.md) 4.3 |
 | D-24 | デプロイ方式（手動 / CodeDeploy） | **未決** | **まず手動**を推奨。[10_infrastructure.md](10_infrastructure.md) 5章 |
 
-> **D-21〜D-24 は [10_infrastructure.md](10_infrastructure.md) 8章と対応している。** 構築を決定した時点で、正式なエントリ（`D-25` 以降）として本書に記録する。
+> **D-21〜D-24 は [10_infrastructure.md](10_infrastructure.md) 8章と対応している。** 構築を決定した時点で、正式なエントリ（`D-29` 以降）として本書に記録する。
 
 ---
 

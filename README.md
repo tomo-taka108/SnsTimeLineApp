@@ -67,12 +67,13 @@ DBにも閲覧ログを持たない設計としており、[要件定義書](doc
 
 | 区分 | 技術 | 用途 |
 |---|---|---|
-| フロントエンド | React (SPA) + Vite | 画面の描画とユーザー操作。APIを呼ぶだけでDBには触れない |
+| フロントエンド | React (SPA) + Vite + TypeScript | 画面の描画とユーザー操作。APIを呼ぶだけでDBには触れない |
 | ルーティング | React Router | 画面遷移（[画面設計](docs/03_screen_design.md)のパスに対応） |
-| バックエンド | Spring Boot (REST API) | REST APIの提供。**HTMLは返さない** |
+| バックエンド | **Spring Boot 4.1.0 / JDK 25** (REST API) | REST APIの提供。**HTMLは返さない** |
+| O/Rマッパー | **MyBatis** | SQLを直接書く。発行クエリ数を目視で確認できる（[D-25](docs/09_decision_log.md)） |
 | データベース | PostgreSQL 16 | データの永続化 |
 | マイグレーション | Flyway | DBスキーマの変更履歴をコード管理 |
-| 認証 | JWT（HS256）+ BCrypt | ステートレス認証・パスワードハッシュ化 |
+| 認証 | JWT（HS256, jjwt）+ BCrypt(cost 10) | ステートレス認証・パスワードハッシュ化 |
 | 画像保存 | ローカルディレクトリ → **Amazon S3** | S3利用は決定済み（[10](docs/10_infrastructure.md)） |
 | 開発環境 | Docker Compose（DBのみ） | PostgreSQL の起動。アプリはIDEから直接起動 |
 | インフラ | AWS（EC2 / RDS / ALB / S3）想定 | 構成図を作成済み。**構築するかは未決** |
@@ -86,6 +87,8 @@ DBにも閲覧ログを持たない設計としており、[要件定義書](doc
 - **Flyway**：DBスキーマの変更履歴をコードとして残し、長期運用での再現性を確保します。「**適用済みマイグレーションは編集しない**」という規約自体も学習項目としています。
 - **JWT（ステートレス）**：セッションをサーバーに持たないため、**EC2を複数台に増やしてもセッション共有の仕組みが不要**になります。インフラ構成を検討した際、この設計がそのまま活きることを確認しました（[10](docs/10_infrastructure.md) 3章）。
 - **Docker はDBのみ**：アプリ本体をコンテナに入れると、IDEからの起動とデバッグが煩雑になります。開発効率を優先し、**DBだけをコンテナ化**する構成としました。
+- **MyBatis（JPAではなく）**：発行されるSQLがコードと1対1で対応するため、「**タイムライン取得のSQL発行回数は3回以内**」「N+1を作らない」という自ら課した性能要件を、**目で確認しながら実装できます**。代償として論理削除の自動除外（Hibernateの`@SQLRestriction`相当）が無く、各SQLに`deleted_at IS NULL`を手書きする必要があるため、条件をXMLで共通化する等の歯止めを設けています（[D-25](docs/09_decision_log.md)）。
+- **jjwt**：非機能要件で「`alg: none` を受け入れない」ことを要求していますが、jjwtでは**これが設定ではなく既定の動作**です。安全側がデフォルトになっているライブラリを選びました（[D-26](docs/09_decision_log.md)）。実際に`alg:none`で細工したトークンが401で拒否されることを確認済みです。
 
 ---
 
@@ -357,7 +360,12 @@ lower(username) LIKE '%aro%'  → Seq Scan     ❌ 左端が不定なので木�
 
 - [x] **要件定義フェーズ** — ドキュメント一式（11本）が完成
 - [x] **画面モックアップ** — 全12画面 + 3モーダルの静的プロトタイプ（[mockup/](mockup/)）
-- [ ] **実装フェーズ** — 未着手
+- [ ] **実装フェーズ** — 進行中
+  - [x] DB構築（`V1__create_users.sql`）
+  - [x] **認証・認可のバックエンド** — 新規登録 / ログイン / `GET /auth/me`
+  - [ ] 投稿作成・全体タイムライン
+  - [ ] フロントエンド（React + Vite + TypeScript）
+  - [ ] 自動テスト
 
 ### 実装の推奨順序
 
@@ -383,14 +391,14 @@ lower(username) LIKE '%aro%'  → Seq Scan     ❌ 左端が不定なので木�
 
 ## ローカル環境で動かす
 
-> **実装フェーズ未着手のため、`backend/` `frontend/` `docker-compose.yml` はまだ存在しません。**
-> 以下は[アーキテクチャ](docs/07_architecture.md) 6章で定義した想定手順です。
+> **`backend/` と `docker-compose.yml` は実装済みで、手順3〜4はそのまま動きます。**
+> **`frontend/` は未着手**のため、手順5はまだ実行できません。
 
 ### 前提
 
 - Docker Desktop
-- JDK 21
-- Node.js 20 以上
+- **JDK 25**
+- Node.js 20 以上（フロントエンド着手後に必要）
 
 ### 手順（初回）
 
@@ -410,11 +418,32 @@ docker compose up -d
 # 4. バックエンド（起動時にFlywayがマイグレーションを自動実行）
 cd backend && ./mvnw spring-boot:run
 
-# 5. フロントエンド（別ターミナル）
+# 5. フロントエンド（別ターミナル）※ 未実装のため現時点では実行できません
 cd frontend && npm install && npm run dev
 ```
 
-ブラウザで http://localhost:5173 を開きます。
+> **`JWT_SECRET` は必ず設定してください。** 既定値を持たせていないため、未設定だと起動に失敗します
+> （弱い鍵で署名し続けるより明確に落とす設計）。なお **Spring Boot は `.env` を自動では読み込まない**ため、
+> `.env` の値は IDE の実行構成かシェルの環境変数に設定します。
+
+### 認証APIを試す（フロント未実装のうちはこちら）
+
+```bash
+BASE=http://localhost:8080/api/v1
+
+# 新規登録（201。登録と同時にJWTが返る）
+curl -i -X POST "$BASE/auth/signup" -H 'Content-Type: application/json' \
+  -d '{"email":"taro@example.com","username":"taro_123","displayName":"たろう","password":"Password1"}'
+
+# ログイン（200）
+TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"taro@example.com","password":"Password1"}' | jq -r .token)
+
+# 現在のユーザー（200）
+curl -i "$BASE/auth/me" -H "Authorization: Bearer $TOKEN"
+```
+
+フロントエンド実装後は、ブラウザで http://localhost:5173 を開きます。
 
 | 対象 | ポート |
 |---|---|

@@ -16,8 +16,10 @@ IDEからの起動とデバッグを優先するため、**アプリ本体はDoc
 | バックエンド（Spring Boot） | `./mvnw spring-boot:run` | 8080 |
 | フロントエンド（React + Vite） | `npm run dev` | 5173 |
 
-> **実装フェーズ未着手のため、`backend/` `frontend/` `docker-compose.yml` はまだ存在しない。**
-> 雛形を作成した時点で、本スキルのコマンドが実際に動くようになる。
+**前提**: JDK 25 / Docker Desktop / Node 20+（フロント着手後）。
+
+> **`docker-compose.yml` と `backend/` は実装済み。** 上記のうち PostgreSQL とバックエンドの手順はそのまま動く。
+> **`frontend/` はまだ存在しない**ため、`npm run dev` を含む手順は実行できない。雛形を作った時点で本スキルを更新すること。
 
 ## 起動・停止
 
@@ -55,23 +57,51 @@ docker compose up -d
 # 3. バックエンド（起動時にFlywayがマイグレーションを自動実行する）
 cd backend && ./mvnw spring-boot:run
 
-# 4. フロントエンド（別ターミナル）
+# 4. フロントエンド（別ターミナル）※ frontend/ 未作成のため現時点では実行不可
 cd frontend && npm install && npm run dev
 ```
 
-ブラウザで http://localhost:5173 を開く。
+> **重要: Spring Boot は `.env` を自動では読み込まない。**
+> `.env` は「IDEの実行構成やシェルに設定する値の転記元」として使う。
+> `application.yml` の既定値が `.env.example` と一致しているため、
+> **実際に設定が必要なのは `JWT_SECRET` だけ**（既定値が無く、未設定だと起動に失敗する）。
+>
+> ```powershell
+> # PowerShell で一時的に設定する例
+> $env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+> ```
+
+### バックエンド単体の動作確認（フロント未実装のうちはこちら）
+
+```bash
+BASE=http://localhost:8080/api/v1
+curl -i -X POST "$BASE/auth/signup" -H 'Content-Type: application/json' \
+  -d '{"email":"taro@example.com","username":"taro_123","displayName":"たろう","password":"Password1"}'
+
+TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"taro@example.com","password":"Password1"}' | jq -r .token)
+
+curl -i "$BASE/auth/me" -H "Authorization: Bearer $TOKEN"
+```
+
+フロント実装後はブラウザで http://localhost:5173 を開く。
 
 ## DBリセット（開発データを初期状態に戻す）
-
-Flyway でシードデータ（`V9__insert_seed_data.sql`）を含めて作り直す。
 
 ```bash
 docker compose down -v && docker compose up -d
 # バックエンドを再起動するとマイグレーションが最初から流れる
 ```
 
-- シードデータの内容は [docs/04_data_model.md](../../../docs/04_data_model.md) 8章を参照
+> **現時点で存在するマイグレーションは `V1__create_users.sql` のみ。**
+> シードデータ（`V9__insert_seed_data.sql`）は未作成のため、リセット後のDBは空になる。
+> 動作確認用のユーザーは上記「バックエンド単体の動作確認」の signup で作る。
+
+シードデータを作る際の方針:
+
+- 内容は [docs/04_data_model.md](../../../docs/04_data_model.md) 8章を参照
 - 全ユーザー共通の平文パスワード（例: `Password1`）をBCryptハッシュ化して投入する
+- **実在の個人名・実在するメールアドレスを使わない**（`example.com` ドメインを使う）
 
 ## よくあるトラブルと対処
 
@@ -99,6 +129,21 @@ docker compose logs db --tail=50
 - **適用済みマイグレーションを編集すると checksum 不一致で失敗する。**
   修正は新しいバージョン（`V10__...`）を追加して行う（[docs/04_data_model.md](../../../docs/04_data_model.md) 7章）
 - 開発中は作り直すほうが早い: `docker compose down -v && docker compose up -d`
+
+### アプリが起動せず「JWT_SECRET は32バイト以上である必要があります」で落ちる
+
+意図的な動作。弱い鍵で署名し続けるより明確に落とす設計になっている
+（[docs/06_non_functional.md](../../../docs/06_non_functional.md) 3.2）。
+`JWT_SECRET` を32バイト以上のランダム文字列に設定して再起動する。
+
+### ビルドが `NoSuchMethodError` で失敗する（JDK 25 特有）
+
+**JDK 25 は javac の内部APIが変わっており、追随していないビルドプラグインが落ちる。**
+実際に Spotless 2.44.4 + google-java-format で発生し、3.10.0 / 1.36.1 へ更新して解決した。
+`NoSuchMethodError` を見たら、まずプラグインのバージョンを疑うこと。
+
+同様に、**`start.spring.io` のメタデータが最新のライブラリ対応状況に追いついていない**ことがある
+（MyBatis が Boot 4.1 非対応と表示された）。Maven Central の POM で実際の対応バージョンを確認する。
 
 ### ポート競合（5432 / 8080 / 5173 が使用中）
 

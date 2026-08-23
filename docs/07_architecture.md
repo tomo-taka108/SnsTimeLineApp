@@ -86,14 +86,14 @@ com.example.snstimeline
 ├─ user
 │   ├─ UserController.java         #17〜#20
 │   ├─ UserService.java
-│   ├─ UserRepository.java
-│   ├─ User.java                   Entity
+│   ├─ UserMapper.java             MyBatis の @Mapper（SQLは resources/mapper/*.xml）
+│   ├─ User.java                   ドメインモデル（record）
 │   └─ dto/
 ├─ post
 │   ├─ PostController.java         #6〜#9
 │   ├─ TimelineController.java     #5
 │   ├─ PostService.java
-│   ├─ PostRepository.java
+│   ├─ PostMapper.java
 │   ├─ Post.java
 │   ├─ PostImage.java
 │   └─ dto/
@@ -279,6 +279,8 @@ if (!post.getUserId().equals(currentUserId)) {
 
 **秘密情報は `.env` に置き、`.gitignore` に含める。** `application.yml` にはデフォルト値のみ書く。
 
+> **補足（実装時に判明）**: **Spring Boot は `.env` を自動では読み込まない。** `.env` / `.env.example` は「IDEの実行構成やシェルに設定する値の転記元」として運用する。`application.yml` の既定値が `.env.example` と一致しているため、**実際に設定が必要なのは `JWT_SECRET` だけ**（既定値を置いておらず、未設定だと起動に失敗する）。
+
 ---
 
 ## 6. ローカル開発環境
@@ -305,6 +307,12 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # 起動完了を判定できるようにする（dev-environment スキルが healthy を確認手順にしているため）
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snsapp -d snstimeline"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 volumes:
   pgdata:
 ```
