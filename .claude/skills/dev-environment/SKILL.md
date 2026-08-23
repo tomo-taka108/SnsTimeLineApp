@@ -16,10 +16,11 @@ IDEからの起動とデバッグを優先するため、**アプリ本体はDoc
 | バックエンド（Spring Boot） | `./mvnw spring-boot:run` | 8080 |
 | フロントエンド（React + Vite） | `npm run dev` | 5173 |
 
-**前提**: JDK 25 / Docker Desktop / Node 20+（フロント着手後）。
+**前提**: JDK 25 / Docker Desktop / Node 20+。
 
-> **`docker-compose.yml` と `backend/` は実装済み。** 上記のうち PostgreSQL とバックエンドの手順はそのまま動く。
-> **`frontend/` はまだ存在しない**ため、`npm run dev` を含む手順は実行できない。雛形を作った時点で本スキルを更新すること。
+> **`docker-compose.yml` / `backend/` / `frontend/` はすべて実装済み。** 上記の手順はそのまま動く。
+> 現時点で動くのは**認証まわりの画面のみ**（新規登録 / ログイン / ログアウト）。
+> `/` は投稿一覧ではなく**仮ページ**（ログイン中ユーザーの表示のみ）。
 
 ## 起動・停止
 
@@ -57,7 +58,7 @@ docker compose up -d
 # 3. バックエンド（起動時にFlywayがマイグレーションを自動実行する）
 cd backend && ./mvnw spring-boot:run
 
-# 4. フロントエンド（別ターミナル）※ frontend/ 未作成のため現時点では実行不可
+# 4. フロントエンド（別ターミナル）
 cd frontend && npm install && npm run dev
 ```
 
@@ -71,7 +72,7 @@ cd frontend && npm install && npm run dev
 > $env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
 > ```
 
-### バックエンド単体の動作確認（フロント未実装のうちはこちら）
+### バックエンド単体の動作確認（curl）
 
 ```bash
 BASE=http://localhost:8080/api/v1
@@ -95,7 +96,7 @@ REFRESH=$(echo "$RES2" | jq -r .refreshToken)
 curl -i -X POST "$BASE/auth/logout" -H "Authorization: Bearer $ACCESS"
 ```
 
-フロント実装後はブラウザで http://localhost:5173 を開く。
+ブラウザで確認する場合は http://localhost:5173 を開く。
 
 ## DBリセット（開発データを初期状態に戻す）
 
@@ -163,6 +164,12 @@ docker compose logs db --tail=50
 - 競合する場合は `docker-compose.yml` の `ports` か、各アプリの設定を空きポートに変更する
 - 何が使っているか確認: `netstat -ano | findstr :5432`（PowerShell）
 - **ホストに別のPostgreSQLが動いていると5432が埋まりやすい**
+
+> **5173 が埋まっていると Vite は黙って 5174 にずれる。**
+> `Port 5173 is in use, trying another one...` と出た場合、画面は開けるが
+> **APIリクエストがすべてCORSで失敗する**（バックエンドは 5173 のみ許可しているため）。
+> エラーがCORSの形で出るので原因が分かりにくい。**まず Vite の起動ログでポート番号を確認すること。**
+> 多くは「既に別ターミナルで `npm run dev` が動いている」だけなので、二重起動を疑う。
 
 ### 画像アップロードが失敗する
 

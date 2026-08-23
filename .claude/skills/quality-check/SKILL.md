@@ -1,5 +1,5 @@
 ---
-description: Spring Boot（Spotless整形・Checkstyle/静的解析・JUnitテスト）と React（ESLint・Prettier・型チェック・ビルド）の品質チェックを実行する。エラーがあれば自動修正または修正して再チェックする。
+description: Spring Boot（Spotless整形・静的解析・JUnitテスト）と React（oxlint・型チェック・ビルド）の品質チェックを実行する。エラーがあれば自動修正または修正して再チェックする。
 allowed-tools: Bash
 disable-model-invocation: false
 ---
@@ -9,9 +9,8 @@ disable-model-invocation: false
 **コミット前に必ず実施すること。** バックエンド（Spring Boot）とフロントエンド（React + Vite）で
 それぞれチェックが必要。
 
-> **`backend/` は実装済み（Spring Boot 4.1.0 / JDK 25 / Maven）。Step 1〜2 のコマンドはそのまま動く。**
-> **`frontend/` はまだ存在しない**ため Step 4〜6 は実行できない。React/Vite の雛形を作った時点で、
-> 本スキルのコマンドを実際のものに更新すること。
+> **`backend/`（Spring Boot 4.1.0 / JDK 25 / Maven）と `frontend/`（React 19 / Vite 8 / TypeScript）は実装済み。**
+> Step 1〜2 と Step 4〜5 のコマンドはそのまま動く。
 >
 > **Step 3（JUnit）は現時点でテストコードが無いため、実行しても何も走らない。** テストを書いた時点でこの注記を消すこと。
 
@@ -74,37 +73,39 @@ cd backend && ./mvnw test
 
 ## フロントエンド（`frontend/`）
 
-### Step 4: ESLint（静的解析）
+### Step 4: oxlint（静的解析）
 
 ```bash
 cd frontend && npm run lint
 ```
 
 - エラー0件が目標。自動修正は `npm run lint -- --fix`
+- 設定は `frontend/.oxlintrc.json`
 
-### Step 5: Prettier（フォーマット）
+> **このプロジェクトは ESLint / Prettier を導入していない。** リンタは oxlint 1本で、
+> `npx prettier --check .` は実行できない。
 
-```bash
-cd frontend && npx prettier --check .
-```
-
-- 違反がある場合は `npx prettier --write .` で修正してから再チェックする
-
-### Step 6: 型チェック＋ビルド
+### Step 5: 型チェック＋ビルド
 
 ```bash
-cd frontend && npx tsc --noEmit    # TypeScript を採用した場合
-cd frontend && npm run build
+cd frontend && npx tsc --noEmit -p tsconfig.app.json   # 型チェック
+cd frontend && npm run build                           # 型チェック＋本番ビルド
 ```
 
 - **ビルドが通ること**が最低条件。型エラーを握りつぶさない
+
+> **`-p tsconfig.app.json` を省略しないこと。** ルートの `tsconfig.json` は
+> `"files": []` の**参照専用**（Project References）のため、単に `npx tsc --noEmit` と打つと
+> **1ファイルも検査せずに exit 0 になる**。型エラーを含むコードが「緑」に見えてしまい、
+> 品質チェックとして機能しない。
+> `npm run build` は `tsc -b` で参照をたどるため、こちらは正しく検査される。
 
 ---
 
 ## 重要事項
 
 - 品質チェックはコミット前に必ず実施する
-- **バックエンド（Step 1〜3）とフロントエンド（Step 4〜6）の両方が緑**になってからコミットする
+- **バックエンド（Step 1〜3）とフロントエンド（Step 4〜5）の両方が緑**になってからコミットする
 - 変更範囲がバックエンドのみ／フロントのみの場合は、該当側だけでもよい
 - 設計との整合確認（[CLAUDE.md](../../../CLAUDE.md) 7.2）も併せて行うこと
 

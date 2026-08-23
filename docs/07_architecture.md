@@ -348,8 +348,15 @@ SnsTimeLineApp/
 │   │   ├─ db/migration/  Flyway
 │   │   └─ mapper/        MyBatis の SQL（*.xml）
 │   └─ uploads/           画像の保存先（.gitignore に追加）
-├─ frontend/              React + Vite ※未作成
+├─ frontend/              React + Vite + TypeScript
 │   ├─ src/
+│   │   ├─ api/           APIクライアント（JWT付与・401時の再発行を集約）
+│   │   ├─ auth/          認証Contextとルートガード
+│   │   ├─ components/    ヘッダー・トースト・フォーム部品
+│   │   ├─ pages/         画面（ファイル名は画面IDに対応）
+│   │   └─ styles/        mockup/common.css から移植
+│   ├─ .env.development   VITE_API_BASE_URL（機密を含まないのでコミットする）
+│   ├─ .oxlintrc.json     リンタ設定
 │   └─ package.json
 ├─ docker-compose.yml
 ├─ .env                   秘密情報（.gitignore に追加）
@@ -372,7 +379,23 @@ SnsTimeLineApp/
 | サーバー状態 | 一覧のキャッシュ・楽観的更新を扱うため、TanStack Query などの利用を推奨（必須ではない） |
 | 画面の状態 | ローディング / 空 / エラー / 正常の4状態を必ず実装（[03_screen_design.md](03_screen_design.md) 8章） |
 
-### 401時の共通処理（F-CO-02）
+### 7.1 実装済みの範囲（認証まで）
+
+| 画面ID | パス | ファイル | 状態 |
+|---|---|---|---|
+| SC-01 | `/login` | `pages/LoginPage.tsx` | 実装済み |
+| SC-02 | `/signup` | `pages/SignupPage.tsx` | 実装済み |
+| SC-03 | `/` | `pages/HomePage.tsx` | **仮ページ。** ログイン中ユーザーの表示のみで、**投稿一覧は未実装**（ステップ3の後） |
+| SC-12 | `*` | `pages/NotFoundPage.tsx` | 実装済み |
+
+**採用したライブラリ**: React 19 / Vite 8 / TypeScript 6 / React Router 7 / oxlint 1。
+**TanStack Query は未導入**（上表は「推奨」であり必須ではない）。認証だけならキャッシュ管理が要らず、
+一覧を扱うステップ3以降で改めて要否を判断する。
+
+> **`/` を「タイムライン実装済み」と誤読しないこと。** 認証の動作確認のための仮ページで、
+> [03_screen_design.md](03_screen_design.md) SC-03 の表示項目はまだ満たしていない。
+
+### 7.2 401時の共通処理（F-CO-02）
 
 **リフレッシュトークン導入により、401は「即ログアウト」ではなく「まず再発行を試みる」に変わった**（[09_decision_log.md](09_decision_log.md) D-29）。
 
@@ -403,6 +426,11 @@ localStorage のリフレッシュトークンで POST /auth/refresh
 
 **各画面で個別に401を処理しない。** 1箇所に集約する。
 
+> **実装済み**: 上記4点はすべて `frontend/src/api/client.ts` に実装している。
+> #2 の集約はモジュールスコープの `refreshing` Promise（`refreshOnce()`）で実現しており、
+> **無効なトークンで `/auth/me` が2本同時に401になっても `/auth/refresh` は1回しか飛ばない**ことを
+> ブラウザのNetworkタブで確認済み（2026-08-23）。
+
 ---
 
 ## 8. 実装の推奨順序
@@ -411,10 +439,10 @@ localStorage のリフレッシュトークンで POST /auth/refresh
 
 | # | 内容 | 完了の目安 | 状態 |
 |---|---|---|---|
-| 1 | DB構築（Flywayマイグレーション） | 全テーブルと制約・インデックスが作られる | **`V1`(users) のみ完了** |
-| 2 | 認証（#1〜#3） | curlでJWTが取得でき、`/auth/me` が通る | **完了** |
+| 1 | DB構築（Flywayマイグレーション） | 全テーブルと制約・インデックスが作られる | **`V1`(users) / `V2`(refresh_tokens) 完了** |
+| 2 | 認証（#1〜#3, #27, #28） | curlでJWTが取得でき、`/auth/me` が通る | **完了** |
 | 3 | 投稿作成・全体TL（#5 `tab=all`, #6, #7） | テキスト投稿がタイムラインに並ぶ | 次はここ |
-| 4 | フロント: ログイン + タイムライン表示 | ブラウザで一連の流れが見える | 未着手 |
+| 4 | フロント: ログイン + タイムライン表示 | ブラウザで一連の流れが見える | **認証側のみ完了**（SC-01 / SC-02 / SC-12 と `/` の仮ページ）。**タイムライン表示はステップ3の後** |
 | 5 | いいね（#14, #15） | **カウンタの整合性をここで作り込む。二重いいねのテストを必ず書く** | 未着手 |
 | 6 | コメント（#10, #11, #13） | カウンタの非対称ルールを実装 | 未着手 |
 | 7 | 画像アップロード（#25, #26） | `FileStorageService` の抽象化を最初から入れる | 未着手 |
