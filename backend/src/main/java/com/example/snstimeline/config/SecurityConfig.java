@@ -59,7 +59,16 @@ public class SecurityConfig {
                     // プリフライトを素通しする（二重の保険）
                     .requestMatchers(CorsUtils::isPreFlightRequest)
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login")
+                    // /refresh は認証不要。期限切れのアクセストークンしか持たない
+                    // 状態で呼ぶAPIなので、有効なアクセストークンを要求しては意味がない。
+                    // 認証情報はボディのリフレッシュトークンそのもの。
+                    // なお /logout は認証必須（誰のトークンを失効させるかを
+                    // アクセストークンから決めるため）で、ここには書かない。
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/auth/signup",
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/refresh")
                     .permitAll()
                     .anyRequest()
                     .authenticated())

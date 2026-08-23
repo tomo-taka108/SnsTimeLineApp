@@ -32,7 +32,11 @@ app:
   jwt:
     # 既定値を置かない。未設定なら起動を失敗させる（docs/06_non_functional.md 3.2）
     secret: ${JWT_SECRET}
-    expiration-hours: ${JWT_EXPIRATION_HOURS:24}
+    # アクセストークン（JWT）は短命にする。失効させられないため、
+    # 漏洩時の被害時間は有効期限がそのまま上限になる（D-29）
+    access-expiration-minutes: ${JWT_ACCESS_EXPIRATION_MINUTES:15}
+    # リフレッシュトークンは長命だが、DBで失効できる
+    refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:14}
   cors:
     # ワイルドカードは使わない（docs/05_api_design.md 7章）
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

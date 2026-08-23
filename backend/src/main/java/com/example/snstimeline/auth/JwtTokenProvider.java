@@ -15,9 +15,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * JWT の生成と検証（docs/06_non_functional.md 3.2）。
+ * アクセストークン（JWT）の生成と検証（docs/06_non_functional.md 3.2）。
  *
  * <p>ペイロードはユーザーIDのみ。JWTはBase64であり暗号化されていないため、 メールアドレスなどの個人情報を入れない。
+ *
+ * <p><b>アクセストークンは短命（既定15分）。</b> JWTは発行後に失効させられないため、 漏洩したときの被害時間は有効期限がそのまま上限になる。長命なセッションは {@link
+ * RefreshTokenService} が扱うリフレッシュトークン（DBで失効可能）に担わせる （docs/09_decision_log.md D-29）。
  */
 @Component
 public class JwtTokenProvider {
@@ -25,11 +28,11 @@ public class JwtTokenProvider {
   private static final int MIN_SECRET_BYTES = 32;
 
   private final SecretKey key;
-  private final long expirationHours;
+  private final long expirationMinutes;
 
   public JwtTokenProvider(
       @Value("${app.jwt.secret}") String secret,
-      @Value("${app.jwt.expiration-hours}") long expirationHours) {
+      @Value("${app.jwt.access-expiration-minutes}") long expirationMinutes) {
 
     byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
     if (secretBytes.length < MIN_SECRET_BYTES) {
@@ -38,18 +41,28 @@ public class JwtTokenProvider {
     }
     // 256bit 未満なら jjwt が WeakKeyException を投げる
     this.key = Keys.hmacShaKeyFor(secretBytes);
-    this.expirationHours = expirationHours;
+    this.expirationMinutes = expirationMinutes;
   }
 
-  /** ユーザーIDを sub に持つJWTを発行する。 */
-  public String createToken(Long userId) {
+  /** ユーザーIDを sub に持つアクセストークンを発行する。 */
+  public String createAccessToken(Long userId) {
     Instant now = Instant.now();
     return Jwts.builder()
         .subject(String.valueOf(userId))
         .issuedAt(Date.from(now))
-        .expiration(Date.from(now.plus(expirationHours, ChronoUnit.HOURS)))
+        .expiration(Date.from(now.plus(expirationMinutes, ChronoUnit.MINUTES)))
         .signWith(key, Jwts.SIG.HS256)
         .compact();
+  }
+
+  /**
+   * アクセストークンの有効秒数。
+   *
+   * <p>クライアントに返して再発行のタイミング判断に使わせる。 これを返さないとクライアントはJWTを自前でデコードして {@code exp} を読む必要があり、
+   * 「トークンの中身はサーバーの都合」という前提が崩れる。
+   */
+  public long getAccessTokenExpiresInSeconds() {
+    return expirationMinutes * 60;
   }
 
   /**

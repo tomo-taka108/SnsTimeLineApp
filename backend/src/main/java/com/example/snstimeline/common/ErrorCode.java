@@ -12,6 +12,9 @@ public enum ErrorCode {
   SELF_FOLLOW_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "自分自身をフォローすることはできません"),
   INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "メールアドレスまたはパスワードが正しくありません"),
   UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "認証が必要です"),
+  // 無効・期限切れ・使用済み・失効済みをすべてこの1コードにまとめる。
+  // 理由を返すと、攻撃者に「そのトークンは存在するが失効済み」といった情報を与えるため
+  INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "セッションの有効期限が切れました。再度ログインしてください"),
   FORBIDDEN(HttpStatus.FORBIDDEN, "この操作を行う権限がありません"),
   NOT_FOUND(HttpStatus.NOT_FOUND, "リソースが見つかりません"),
   EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "このメールアドレスは既に登録されています"),
