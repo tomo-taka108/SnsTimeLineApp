@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.snstimeline.user.UserMapper">
+
+  <!--
+    論理削除の除外条件。MyBatis には @SQLRestriction に相当する自動除外が無いため、
+    条件を1箇所で定義して各SQLから include する（docs/09_decision_log.md D-25）。
+    users を参照するSQLを増やすときは、必ずこれを include すること。
+  -->
+  <sql id="activeOnly">deleted_at IS NULL</sql>
+
+  <sql id="userColumns">
+    id, email, password_hash, username, display_name, bio,
+    avatar_file_id, created_at, updated_at, deleted_at
+  </sql>
+
+  <select id="findByEmail" resultType="com.example.snstimeline.user.User">
+    SELECT <include refid="userColumns"/>
+    FROM users
+    WHERE email = #{email}
+      AND <include refid="activeOnly"/>
+  </select>
+
+  <select id="findById" resultType="com.example.snstimeline.user.User">
+    SELECT <include refid="userColumns"/>
+    FROM users
+    WHERE id = #{id}
+      AND <include refid="activeOnly"/>
+  </select>
+
+  <!--
+    重複チェックは意図的に deleted_at を見ない。
+    一意制約が deleted_at を絡めない設計（退会したメール・ユーザー名は再利用させない）
+    のため、退会済みユーザーも重複として扱うのが正しい（docs/04_data_model.md 2.1）。
+  -->
+  <select id="existsByEmailIncludingDeleted" resultType="boolean">
+    SELECT EXISTS(SELECT 1 FROM users WHERE email = #{email})
+  </select>
+
+  <select id="existsByUsernameIncludingDeleted" resultType="boolean">
+    SELECT EXISTS(SELECT 1 FROM users WHERE username = #{username})
+  </select>
+
+  <!--
+    値の埋め込みは必ず #{}（プリペアドステートメント）。
+    ${} は文字列置換でSQLインジェクションになるため使わない
+    （docs/06_non_functional.md 3.7）。
+  -->
+  <select id="insert" resultType="java.lang.Long">
+    INSERT INTO users (email, password_hash, username, display_name)
+    VALUES (#{user.email}, #{user.passwordHash}, #{user.username}, #{user.displayName})
+    RETURNING id
+  </select>
+
+</mapper>
