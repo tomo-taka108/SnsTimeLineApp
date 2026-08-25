@@ -1,9 +1,11 @@
 /*
  * 全体で使うスタイル。
  *
- * mockup/common.css から、認証画面・ヘッダー・トーストに必要な部分だけを移植した。
- * デザイントークン（:root）はモックアップのものをそのまま採用する。
- * モック専用の .mock-banner / .note-box は持ち込まない。
+ * mockup/common.css から、認証画面・ヘッダー・トースト・タイムライン・投稿詳細に
+ * 必要な部分だけを移植した。デザイントークン（:root）はモックアップのものをそのまま採用する。
+ * モック専用の .mock-banner / .note-box / .img-a〜d（画像プレースホルダ）/
+ * .comment-form（コメント機能未実装）は持ち込まない。
+ * .new-posts-pill はモックアップに無い、今回追加した新着通知バナー用（D-31）。
  */
 
 /* ===== デザイントークン ===== */
@@ -15,6 +17,8 @@
 
   /* 状態 */
   --color-danger: #f4212e;
+  --color-like: #f91880;
+  --color-skeleton: #e6e9ea;
   --color-success: #00ba7c;
 
   /* 面・文字 */
@@ -247,6 +251,16 @@ button {
   width: 100%;
 }
 
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.btn-sm {
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
 /* ===== ヘッダー（ログイン時のみ表示） ===== */
 .app-header {
   position: sticky;
@@ -469,57 +483,579 @@ button {
   font-size: 14px;
 }
 
-/* ===== ログイン後の仮ページ（SC-03 の暫定） ===== */
-.welcome {
-  text-align: center;
-  padding: 24px 0;
-}
-
-/* バッジ・アバター・名前を縦に積む。
-   .welcome-badge も .avatar も inline-flex のため、
-   flex コンテナにしないと横に並んでしまう */
-.welcome {
+/* ===== 戻るバー（SC-04 など） ===== */
+.back-bar {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 150;
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.welcome .welcome-badge {
-  display: inline-flex;
+.back-bar .title {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.back-bar .sub {
+  font-size: 12px;
+  color: var(--color-text-sub);
+  font-weight: 500;
+}
+
+/* ===== タブ（SC-03） ===== */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: var(--header-h);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  z-index: 150;
+}
+
+.tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 15px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-sub);
+  position: relative;
+  transition: background 0.15s;
+}
+
+.tab:hover {
+  background: var(--color-bg-sub);
+}
+
+.tab .tab-label {
+  display: inline-block;
+  padding-bottom: 14px;
+  position: relative;
+}
+
+.tab.is-active {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.tab.is-active .tab-label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-primary);
+}
+
+/* ===== 投稿カード（docs/03_screen_design.md 5.1） ===== */
+.post-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.post-card:hover {
+  background: var(--color-bg-sub);
+}
+
+.post-card.is-detail {
+  cursor: default;
+  border-bottom: none;
+  display: block;
+}
+
+.post-card.is-detail:hover {
+  background: transparent;
+}
+
+.post-body-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.post-head {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(0, 186, 124, 0.1);
-  color: #0a7d57;
-  border-radius: 999px;
-  padding: 6px 16px;
-  font-size: 13px;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.post-head .name {
   font-weight: 700;
-  margin: 0 0 22px;
+  color: var(--color-text);
+  text-decoration: none;
 }
 
-.welcome .avatar {
-  margin-bottom: 14px;
+.post-head .name:hover {
+  text-decoration: underline;
 }
 
-.welcome h1 {
-  font-size: 20px;
-  margin: 0 0 2px;
-}
-
-.welcome .handle {
+.post-head .handle,
+.post-head .time {
   color: var(--color-text-sub);
   font-size: 14px;
-  margin: 0 0 24px;
 }
 
-.welcome .next-note {
-  width: 100%;
-  border-top: 1px solid var(--color-border);
-  padding-top: 20px;
-  margin: 0;
+.post-head .edited {
   color: var(--color-text-sub);
   font-size: 13px;
-  line-height: 1.9;
+}
+
+.post-head .spacer {
+  flex: 1;
+}
+
+.post-text {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* タイムラインでは5行を超えたら省略する（docs/03_screen_design.md 5.1） */
+.post-text.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* アクション行。コメントといいねの2つだけ（差別化ポイント、インプレッション数は出さない） */
+.post-actions {
+  display: flex;
+  align-items: center;
+  gap: 64px;
+  margin-top: 10px;
+  max-width: 320px;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: transparent;
+  padding: 5px;
+  border-radius: 999px;
+  color: var(--color-text-sub);
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    color 0.15s,
+    background 0.15s;
+  text-decoration: none;
+}
+
+.action-btn .ico {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.action-comment:hover {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  text-decoration: none;
+}
+
+.action-like:hover {
+  color: var(--color-like);
+  background: rgba(249, 24, 128, 0.1);
+}
+
+/* isLikedByMe: true で塗りつぶし。今回いいねAPIは未実装のため常に非活性 */
+.action-like.is-liked {
+  color: var(--color-like);
+}
+
+.action-like.is-liked .ico {
+  animation: like-pop 0.28s ease;
+}
+
+@keyframes like-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* [⋯] メニュー（自分の投稿のみ表示） */
+.more-menu {
+  position: relative;
+}
+
+.more-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-sub);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.more-btn:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+/* ===== FAB（投稿ボタン） ===== */
+.fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 180;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  padding: 15px 24px;
+  box-shadow: 0 6px 20px rgba(29, 155, 240, 0.42);
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+
+.fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(29, 155, 240, 0.5);
+}
+
+/* 新着投稿バナー（モックアップ・設計書のいずれにも無い今回追加の要望。
+   docs/09_decision_log.md D-31）。ヘッダーの下に浮かせるモーダル風のピル */
+.new-posts-pill {
+  position: fixed;
+  top: calc(var(--header-h) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 160;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(29, 155, 240, 0.45);
+  animation: modal-in 0.18s ease;
+}
+
+/* ===== 文字数カウンタ（docs MD-01）: グレー → 警告色 → 赤 ===== */
+.char-counter {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-sub);
+}
+
+.char-counter.is-warn {
+  color: #c99400;
+}
+
+.char-counter.is-over {
+  color: var(--color-danger);
+}
+
+/* ===== モーダル ===== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 20, 25, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 60px 16px 16px;
+  z-index: 400;
+}
+
+.modal {
+  width: 100%;
+  max-width: 560px;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 50px rgba(15, 20, 25, 0.3);
+  overflow: hidden;
+  animation: modal-in 0.18s ease;
+}
+
+.modal-sm {
+  max-width: 380px;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-body {
+  padding: 16px;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.modal-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--color-text);
+}
+
+.modal-close:hover {
+  background: var(--color-border);
+}
+
+.compose {
+  display: flex;
+  gap: 12px;
+}
+
+.compose textarea {
+  flex: 1;
+  border: none;
+  resize: none;
+  font-family: inherit;
+  font-size: 19px;
+  line-height: 1.5;
+  min-height: 110px;
+  padding: 10px 0;
+  color: var(--color-text);
+}
+
+.compose textarea:focus {
+  outline: none;
+}
+
+/* 確認モーダル（MD-03）、および投稿破棄の確認にも流用する */
+.confirm-body {
+  padding: 26px 24px 8px;
+  text-align: center;
+}
+
+.confirm-body h3 {
+  margin: 0 0 10px;
+  font-size: 19px;
+}
+
+.confirm-body p {
+  margin: 0;
+  color: var(--color-text-sub);
+  font-size: 14px;
+}
+
+.confirm-foot {
+  display: flex;
+  gap: 10px;
+  padding: 20px 24px 24px;
+}
+
+.confirm-foot .btn {
+  flex: 1;
+}
+
+/* ===== 状態表示（ローディング / 空 / エラー、docs/03_screen_design.md 8章） ===== */
+
+/* スケルトン（スピナーではなくスケルトンにして、読み込み後のレイアウトシフトを防ぐ） */
+.skeleton-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sk {
+  background: linear-gradient(90deg, var(--color-skeleton) 25%, #f2f4f5 50%, var(--color-skeleton) 75%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.3s infinite;
+  border-radius: 6px;
+}
+
+.sk-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sk-line {
+  height: 12px;
+  margin-bottom: 8px;
+}
+
+.sk-w-30 {
+  width: 30%;
+}
+
+.sk-w-60 {
+  width: 60%;
+}
+
+.sk-w-90 {
+  width: 90%;
+}
+
+.sk-w-100 {
+  width: 100%;
+}
+
+@keyframes sk-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* 空状態: 次に取るべき行動を提示する */
+.state-block {
+  padding: 52px 28px;
+  text-align: center;
+}
+
+.state-block .state-icon {
+  font-size: 40px;
+  margin-bottom: 14px;
+  opacity: 0.5;
+}
+
+.state-block h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.state-block p {
+  margin: 0 0 20px;
+  color: var(--color-text-sub);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 一覧取得の失敗はリスト領域内に表示する（トーストにしない） */
+.state-error {
+  margin: 16px;
+  padding: 22px;
+  text-align: center;
+  border: 1px solid rgba(244, 33, 46, 0.3);
+  background: rgba(244, 33, 46, 0.05);
+  border-radius: var(--radius);
+}
+
+.state-error p {
+  margin: 0 0 14px;
+  color: #b3121c;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* 無限スクロールのフッタ */
+.list-foot {
+  padding: 22px;
+  text-align: center;
+  color: var(--color-text-sub);
+  font-size: 13px;
+}
+
+/* ===== 投稿詳細（SC-04） ===== */
+.detail-post {
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-text {
+  font-size: 20px;
+  line-height: 1.5;
+  margin: 14px 0;
+  white-space: pre-wrap;
+}
+
+.detail-time {
+  color: var(--color-text-sub);
+  font-size: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* 「12 いいね」の独立行（クリックで SC-10、Phase2） */
+.detail-stats {
+  display: flex;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+
+.detail-stats a,
+.detail-stats span {
+  color: var(--color-text-sub);
+  text-decoration: none;
+}
+
+.detail-stats a:hover {
+  text-decoration: underline;
+}
+
+.detail-stats strong {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: space-around;
+  padding: 6px 0;
 }
 
 /* ===== レスポンシブ ===== */
@@ -535,5 +1071,29 @@ button {
   .app-main {
     border-left: none;
     border-right: none;
+  }
+
+  .fab {
+    right: 16px;
+    bottom: 16px;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    justify-content: center;
+    font-size: 22px;
+  }
+
+  .fab .fab-label {
+    display: none;
+  }
+
+  .post-actions {
+    gap: 0;
+    justify-content: space-between;
+    max-width: 260px;
+  }
+
+  .detail-text {
+    font-size: 17px;
   }
 }

@@ -126,10 +126,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
 カーソルは `(created_at, id)` の複合キーをJSON化してBase64エンコードした**不透明な文字列**とする。
 
 ```
-{"c":"2026-08-17T12:34:56Z","i":1234}
-        ↓ Base64
-eyJjIjoiMjAyNi0wOC0xN1QxMjozNDo1NloiLCJpIjoxMjM0fQ==
+{"c":"2026-08-17T12:34:56.123456Z","i":1234}
+        ↓ Base64（URLセーフ版）
 ```
+
+> **⚠️ 時刻の精度はマイクロ秒（[09_decision_log.md](09_decision_log.md) D-33）。** 当初は秒精度で設計していたが、秒に丸めると行値比較 `(created_at, id) < (cursor)` で同一秒内の投稿を取りこぼす不具合が実装時に見つかったため変更した。Base64もURLセーフ版を使う（標準Base64の `+` がクエリ文字列で空白に化ける問題への対処）。
 
 | 項目 | 内容 |
 |---|---|
@@ -197,8 +198,11 @@ eyJjIjoiMjAyNi0wOC0xN1QxMjozNDo1NloiLCJpIjoxMjM0fQ==
 | 24 | `GET` | `/users/{userId}/followers` | 必要 | F-FL-04 | フォロワー一覧（Phase2） |
 | 25 | `POST` | `/files` | 必要 | F-IM-01, F-IM-03 | 画像アップロード |
 | 26 | `GET` | `/files/{fileId}` | 不要 | F-IM-02 | 画像配信 |
+| 29 | `GET` | `/timeline/new-count` | 必要 | なし（本APIから新設） | 新着投稿の件数（SC-03の新着通知バナー用） |
 
 > **#27 / #28 は後から追加した認証エンドポイント**（[09_decision_log.md](09_decision_log.md) D-29）。認証系なので表では #4 の直後に置いているが、**番号は末尾の続き**にしている。既存の番号を振り直さないため（CLAUDE.md 7.4「IDは一度振ったら変更しない」）。
+>
+> **#29 は要件定義フェーズの設計書には存在しない。** 投稿機能の実装時、新着通知バナー（設計書・モックアップのいずれにも無い追加要望）のために新設した（[09_decision_log.md](09_decision_log.md) D-31）。表では #26 の直後に置いているが、これも既存の番号を振り直さないための末尾続番である。
 
 ### 3.1 設計上の重要な判断
 
@@ -541,6 +545,31 @@ SELECT post_id FROM likes WHERE user_id = :me AND post_id = ANY(:postIds);
 > **⚠️ 発行済みのアクセストークンは失効しない。** ステートレスJWTの本質的な性質で、最大15分間は使えてしまう。**クライアントは必ず localStorage の両トークンを破棄すること。** サーバー側の失効はあくまで「延長させない」ための措置である（[09_decision_log.md](09_decision_log.md) D-29）。
 
 ---
+
+### #29 `GET /timeline/new-count` — 新着投稿の件数
+
+> **本エンドポイントは要件定義フェーズの設計書（#1〜#28）には存在しない。** 投稿機能の実装時、SC-03 の新着通知バナー（設計書・モックアップのいずれにも無い追加要望）のために新設した（[09_decision_log.md](09_decision_log.md) D-31）。既存の番号を振り直さず、末尾の続きとして採番している。
+
+**認証**: 必要 / **機能**: なし（本APIから新設） / **画面**: SC-03
+
+**クエリパラメータ**
+
+| 名前 | 必須 | デフォルト | 説明 |
+|---|---|---|---|
+| `tab` | — | `all` | `all`（全体） / `following`（フォロー中） |
+| `sinceId` | **必須** | — | クライアントが表示している先頭投稿の `id` |
+
+**レスポンス `200 OK`**
+
+```json
+{ "count": 3 }
+```
+
+> **`since` にカーソルではなく `sinceId`（先頭投稿のid）を使う。** `nextCursor` は「末尾」の位置しか表さないため、クライアントは先頭のカーソルを組み立てられない（カーソルは不透明であるべきという方針）。`id` は `BIGSERIAL` の単調増加のため、新着判定にはこれで十分。
+
+> **60秒間隔でポーリングする想定。** WebSocket / SSE は接続管理・認証の複雑さが学習段階では過剰と判断した（[09_decision_log.md](09_decision_log.md) D-31）。`COUNT(*)` 1本のみで、投稿本体は返さない。
+
+---
 ---
 
 ### #5 `GET /timeline` — タイムライン取得
@@ -613,6 +642,8 @@ SQLは [04_data_model.md](04_data_model.md) 5.1 / 5.2 を参照。
 ---
 
 ### #8 `PATCH /posts/{postId}` — 投稿編集（Phase2）
+
+> **[09_decision_log.md](09_decision_log.md) D-30 によりMVPへ前倒し実装した。** 見出しの「Phase2」は当初の優先度の記録として残す（[02_feature_list.md](02_feature_list.md) F-PO-04も同様）。
 
 **認証**: 必要 / **機能**: F-PO-04 / **画面**: MD-02
 

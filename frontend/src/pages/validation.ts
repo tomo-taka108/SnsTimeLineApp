@@ -60,3 +60,10 @@ export function validatePasswordConfirm(password: string, confirm: string): stri
   if (password !== confirm) return "パスワードが一致しません";
   return undefined;
 }
+
+/** 投稿本文（MD-01 / MD-02）。バックエンドの CreatePostRequest と同じメッセージにする */
+export function validatePostBody(value: string): string | undefined {
+  if (!trim(value)) return "本文を入力してください";
+  if (countChars(value) > 280) return "本文は280文字以内で入力してください";
+  return undefined;
+}

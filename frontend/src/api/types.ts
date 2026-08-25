@@ -76,3 +76,55 @@ export type LoginPayload = {
   email: string;
   password: string;
 };
+
+/** 投稿に添付された画像。画像機能は未実装のため、実際に配列へ入ることは無い */
+export type PostImageSummary = {
+  fileId: number;
+  url: string;
+  width: number;
+  height: number;
+};
+
+/**
+ * 投稿（タイムライン・詳細で共通、docs/05_api_design.md 4章 PostSummary）。
+ *
+ * likeCount / isLikedByMe はいいねAPI（#14/#15）が未実装のため常に 0 / false。
+ * commentCount はコメント機能が未実装のため常に 0。
+ */
+export type PostSummary = {
+  id: number;
+  author: UserSummary;
+  body: string;
+  images: PostImageSummary[];
+  likeCount: number;
+  commentCount: number;
+  isLikedByMe: boolean;
+  createdAt: string;
+  /** null でなければ「編集済み」を表示する */
+  editedAt: string | null;
+};
+
+/** カーソルページネーションの共通レスポンス（docs/05_api_design.md 4章 CursorPage） */
+export type CursorPage<T> = {
+  items: T[];
+  /** hasNext が false のときは null */
+  nextCursor: string | null;
+  hasNext: boolean;
+};
+
+/** #29 GET /timeline/new-count のレスポンス。設計書#1〜#28には無い独自API（D-31） */
+export type NewCountResponse = {
+  count: number;
+};
+
+export type TimelineTab = "all" | "following";
+
+/** #6 投稿作成のリクエスト。imageFileIds は画像機能未実装のため含めない */
+export type CreatePostPayload = {
+  body: string;
+};
+
+/** #8 投稿編集のリクエスト */
+export type UpdatePostPayload = {
+  body: string;
+};

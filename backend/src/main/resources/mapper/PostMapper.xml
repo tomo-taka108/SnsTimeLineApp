@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.snstimeline.post.PostMapper">
+
+  <!--
+    論理削除の除外条件。各マッパーXMLが自前で定義する（UserMapper.xml と同じ規約、
+    docs/09_decision_log.md D-25）。posts を参照するSQLを増やすときは必ず include すること。
+    部分インデックス idx_posts_timeline / idx_posts_user_created が使われるためにも必須。
+  -->
+  <sql id="activeOnly">p.deleted_at IS NULL</sql>
+
+  <sql id="postColumns">
+    p.id, p.user_id, p.body, p.like_count, p.comment_count,
+    p.created_at, p.updated_at, p.edited_at, p.deleted_at
+  </sql>
+
+  <!--
+    タイムライン1行分。author は JOIN で同時に取る（N+1回避）。
+    resultMap ではなくフラットな PostRow に受け、PostSummary への組み立ては
+    Service で行う（docs/09_decision_log.md D-32）。
+  -->
+  <sql id="rowColumns">
+    p.id, p.user_id, p.body, p.like_count, p.comment_count, p.created_at, p.edited_at,
+    u.id             AS author_id,
+    u.username       AS author_username,
+    u.display_name   AS author_display_name,
+    u.avatar_file_id AS author_avatar_file_id
+  </sql>
+
+  <!--
+    タイムライン（docs/04_data_model.md 5.1 / 5.2、API #5）。
+
+    (p.created_at, p.id) &lt; (:cursorCreatedAt, :cursorId) は PostgreSQL の行値比較。
+    a &lt; x OR (a = x AND b &lt; y) と等価だが、こちらの方がインデックスも効きやすい
+    （docs/04_data_model.md 5.1）。初回（cursor省略）はこの条件を丸ごと外す。
+
+    フォロー中タブは IN サブクエリで自分の投稿も含める（F-TL-02, D-11）。
+    JOIN + UNION ではなくこの形にする理由は docs/04_data_model.md 5.2 を参照。
+  -->
+  <select id="findTimeline" resultType="com.example.snstimeline.post.PostRow">
+    SELECT <include refid="rowColumns"/>
+    FROM posts p
+    JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
+    WHERE <include refid="activeOnly"/>
+    <if test="tab.name() == 'FOLLOWING'">
+      AND ( p.user_id = #{meId}
+         OR p.user_id IN (SELECT f.followee_id FROM follows f WHERE f.follower_id = #{meId}) )
+    </if>
+    <if test="cursorCreatedAt != null">
+      AND (p.created_at, p.id) &lt; (#{cursorCreatedAt}, #{cursorId})
+    </if>
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT #{limit}
+  </select>
+
+  <!--
+    #29 新着件数。sinceId（クライアントが持つ先頭投稿のid）より新しい投稿を数える。
+    id は BIGSERIAL の単調増加なので、created_at を使わずに新着判定できる
+    （docs/09_decision_log.md D-31）。
+  -->
+  <select id="countNewer" resultType="long">
+    SELECT COUNT(*)
+    FROM posts p
+    WHERE <include refid="activeOnly"/>
+    <if test="tab.name() == 'FOLLOWING'">
+      AND ( p.user_id = #{meId}
+         OR p.user_id IN (SELECT f.followee_id FROM follows f WHERE f.follower_id = #{meId}) )
+    </if>
+      AND p.id &gt; #{sinceId}
+  </select>
+
+  <select id="findRowById" resultType="com.example.snstimeline.post.PostRow">
+    SELECT <include refid="rowColumns"/>
+    FROM posts p
+    JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
+    WHERE p.id = #{id}
+      AND <include refid="activeOnly"/>
+  </select>
+
+  <select id="findById" resultType="com.example.snstimeline.post.Post">
+    SELECT <include refid="postColumns"/>
+    FROM posts p
+    WHERE p.id = #{id}
+      AND <include refid="activeOnly"/>
+  </select>
+
+  <!--
+    値の埋め込みは必ず #{}（プリペアドステートメント）。
+    ${} は文字列置換でSQLインジェクションになるため使わない（docs/06_non_functional.md 3.7）。
+    record は不変でキーを書き戻せないため RETURNING id で受ける（UserMapper.xml と同じ）。
+  -->
+  <select id="insert" resultType="java.lang.Long">
+    INSERT INTO posts (user_id, body)
+    VALUES (#{userId}, #{body})
+    RETURNING id
+  </select>
+
+  <!--
+    本文編集（#8）。edited_at にも時刻を入れる。
+    updated_at はカウンタ更新でも変わるため「編集済み」判定には使えない
+    （docs/04_data_model.md 2.2）。
+  -->
+  <update id="updateBody">
+    UPDATE posts
+    SET body = #{body}, edited_at = now(), updated_at = now()
+    WHERE id = #{id}
+      AND deleted_at IS NULL
+  </update>
+
+  <update id="softDelete">
+    UPDATE posts
+    SET deleted_at = now(), updated_at = now()
+    WHERE id = #{id}
+      AND deleted_at IS NULL
+  </update>
+
+</mapper>
