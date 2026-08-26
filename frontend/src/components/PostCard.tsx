@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { PostSummary } from "../api/types";
 import { useAuth } from "../auth/useAuth";
+import { useLike } from "../hooks/useLike";
 import { formatRelative } from "../utils/datetime";
 import { Avatar } from "./Avatar";
 
@@ -9,21 +10,21 @@ type Props = {
   post: PostSummary;
   onEdit: (post: PostSummary) => void;
   onDelete: (post: PostSummary) => void;
+  onLikeChange: (post: PostSummary) => void;
 };
 
 /**
  * 投稿カード（docs/03_screen_design.md 5.1、mockup/mock.js postCardHtml）。
  *
- * カード全体クリックで投稿詳細へ遷移する。アバター・表示名・[⋯] はクリックを
+ * カード全体クリックで投稿詳細へ遷移する。アバター・表示名・[⋯]・いいねボタンはクリックを
  * 伝播させない（AppHeader.tsx のドロップダウンと同じ外側クリック＋Escapeパターン）。
- *
- * いいねボタンは今回スコープ外のため表示のみで、押しても反応しない。
  */
-export function PostCard({ post, onEdit, onDelete }: Props) {
+export function PostCard({ post, onEdit, onDelete, onLikeChange }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { toggle: toggleLike, isSubmitting: isLikeSubmitting } = useLike(post, onLikeChange);
 
   const isMine = user?.id === post.author.id;
 
@@ -115,13 +116,22 @@ export function PostCard({ post, onEdit, onDelete }: Props) {
             </span>
             <span>{post.commentCount}</span>
           </span>
-          {/* いいねは今回スコープ外。表示のみで onClick を付けない */}
-          <span className={post.isLikedByMe ? "action-btn action-like is-liked" : "action-btn action-like"}>
+          <button
+            type="button"
+            className={post.isLikedByMe ? "action-btn action-like is-liked" : "action-btn action-like"}
+            disabled={isLikeSubmitting}
+            aria-label="いいね"
+            aria-pressed={post.isLikedByMe}
+            onClick={(event) => {
+              event.stopPropagation();
+              void toggleLike();
+            }}
+          >
             <span className="ico" aria-hidden="true">
               {post.isLikedByMe ? "♥" : "♡"}
             </span>
             <span>{post.likeCount}</span>
-          </span>
+          </button>
         </div>
       </div>
     </article>

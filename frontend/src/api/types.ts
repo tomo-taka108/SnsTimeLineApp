@@ -85,12 +85,7 @@ export type PostImageSummary = {
   height: number;
 };
 
-/**
- * 投稿（タイムライン・詳細で共通、docs/05_api_design.md 4章 PostSummary）。
- *
- * likeCount / isLikedByMe はいいねAPI（#14/#15）が未実装のため常に 0 / false。
- * commentCount はコメント機能が未実装のため常に 0。
- */
+/** 投稿（タイムライン・詳細で共通、docs/05_api_design.md 4章 PostSummary）。 */
 export type PostSummary = {
   id: number;
   author: UserSummary;
@@ -127,4 +122,40 @@ export type CreatePostPayload = {
 /** #8 投稿編集のリクエスト */
 export type UpdatePostPayload = {
   body: string;
+};
+
+/**
+ * コメント（docs/05_api_design.md 4章 Comment）。
+ *
+ * editedAt はコメント編集（#12）がPhase2のため今回は常に null。
+ */
+export type Comment = {
+  id: number;
+  author: UserSummary;
+  body: string;
+  isMine: boolean;
+  createdAt: string;
+  editedAt: string | null;
+};
+
+/** #11 コメント投稿のリクエスト */
+export type CreateCommentPayload = {
+  body: string;
+};
+
+/** #11 コメント投稿のレスポンス */
+export type CreateCommentResponse = {
+  comment: Comment;
+  commentCount: number;
+};
+
+/** #13 コメント削除のレスポンス */
+export type DeleteCommentResponse = {
+  commentCount: number;
+};
+
+/** #14 / #15 いいね・いいね解除のレスポンス */
+export type LikeResponse = {
+  likeCount: number;
+  isLikedByMe: boolean;
 };

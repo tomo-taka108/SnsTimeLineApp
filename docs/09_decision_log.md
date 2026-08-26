@@ -737,6 +737,42 @@ D-06はカーソルを `{"c":"<ISO8601 UTC 秒精度>","i":<id>}` と定めて�
 
 ---
 
+## D-34 いいねのUNIQUE制約違反は保険ハンドラに委ねず個別に捕捉する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-25 |
+| **論点** | いいねAPI（#14）の二重登録（`uq_likes_post_user` 違反）をどこで冪等に処理するか |
+| **選択肢** | A. `GlobalExceptionHandler` の `DataIntegrityViolationException` ハンドラに任せる / **B. `LikeService` 内で `DuplicateKeyException` を個別に捕捉する** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+既存の `GlobalExceptionHandler.handleDataIntegrity` は認証機能（signup）専用の保険ハンドラで、`EMAIL_ALREADY_EXISTS` 固定でエラーを返す。いいねの二重登録をここに落とすと「いいね済みなのにメール重複エラー」という誤った応答になる。いいねは**冪等**（`docs/05_api_design.md` #14）であるべきで、そもそも例外として扱わず `200 OK` を返す必要があるため、`AuthService.signup` と同じパターン（`DuplicateKeyException` をその場で捕捉）を `LikeService.like` で踏襲する。
+
+**影響範囲**: バックエンド実装（`post/LikeService.java`）
+
+---
+
+## D-35 小規模な重複ロジックは2箇所目まで共通化しない
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-25 |
+| **論点** | コメント機能の実装で、`[⋯]` メニューの外側クリック検知（`PostCard`/`CommentItem`）と、`limit` クランプ処理（`PostService`/`CommentService`）が2箇所で重複した。共通化すべきか |
+| **選択肢** | A. 今すぐ `useDropdownMenu` フックや共通バリデーションヘルパーに切り出す / **B. 2箇所目は重複を許容し、3箇所目が出た時点で切り出しを検討する** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+2箇所だけの重複に対して共通化すると、将来「タイムラインとコメントで `limit` の上限を別々に変えたくなった」ような場面で、共通化そのものが変更の足かせになりうる。3箇所目（例: プロフィールの投稿一覧、いいねしたユーザー一覧）が出た時点で、実際のパターンの共通部分を見ながら切り出す方が無理がない。
+
+**影響範囲**: フロントエンド実装（`components/PostCard.tsx`, `components/CommentItem.tsx`）/ バックエンド実装（`post/PostService.java`, `comment/CommentService.java`）
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

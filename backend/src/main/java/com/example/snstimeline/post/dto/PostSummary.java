@@ -11,9 +11,6 @@ import java.util.List;
  *
  * <p>{@code images} は画像機能未実装のため常に空配列（{@code null} にしない）。
  *
- * <p>{@code likeCount} / {@code isLikedByMe} は今回いいねAPI（#14/#15）を実装しないため、 常に {@code 0} / {@code
- * false} を返す。カード側は表示のみで反応しない。
- *
  * <p><b>{@code isLikedByMe} は {@code @JsonProperty} を明示する。</b> record + boolean
  * アクセサの組み合わせはJacksonのバージョンによって {@code likedByMe} と解釈されうるため、確実にAPI契約どおりの キー名で出す。
  *
@@ -31,8 +28,13 @@ public record PostSummary(
     OffsetDateTime createdAt,
     OffsetDateTime editedAt) {
 
-  /** タイムラインSQLの1行から組み立てる。いいね・画像は今回未実装のため固定値になる。 */
-  public static PostSummary from(PostRow row) {
+  /**
+   * タイムラインSQLの1行から組み立てる。
+   *
+   * @param isLikedByMe 呼び出し側が一括取得した「自分がいいね済みか」の判定結果を渡す （docs/04_data_model.md
+   *     5.3、N+1回避）。画像は今回未実装のため常に空配列になる
+   */
+  public static PostSummary from(PostRow row, boolean isLikedByMe) {
     UserSummary author =
         UserSummary.fromRow(
             row.authorId(),
@@ -46,7 +48,7 @@ public record PostSummary(
         List.of(),
         row.likeCount(),
         row.commentCount(),
-        false,
+        isLikedByMe,
         row.createdAt(),
         row.editedAt());
   }

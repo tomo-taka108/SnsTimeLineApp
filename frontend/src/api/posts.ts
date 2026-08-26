@@ -2,6 +2,7 @@ import { request } from "./client";
 import type {
   CreatePostPayload,
   CursorPage,
+  LikeResponse,
   NewCountResponse,
   PostSummary,
   TimelineTab,
@@ -9,7 +10,7 @@ import type {
 } from "./types";
 
 /**
- * 投稿・タイムラインAPIの呼び出し（docs/05_api_design.md #5〜#9、および独自追加の #29）。
+ * 投稿・タイムラインAPIの呼び出し（docs/05_api_design.md #5〜#9, #14, #15、および独自追加の #29）。
  */
 
 /** #5 タイムライン取得。cursor はサーバーが返した不透明な文字列。中身を解釈しない */
@@ -52,4 +53,14 @@ export function updatePost(postId: number, payload: UpdatePostPayload): Promise<
 /** #9 投稿削除。204 が返る */
 export function deletePost(postId: number): Promise<void> {
   return request<void>(`/posts/${postId}`, { method: "DELETE" });
+}
+
+/** #14 いいね。冪等 */
+export function likePost(postId: number): Promise<LikeResponse> {
+  return request<LikeResponse>(`/posts/${postId}/like`, { method: "PUT" });
+}
+
+/** #15 いいね解除。冪等 */
+export function unlikePost(postId: number): Promise<LikeResponse> {
+  return request<LikeResponse>(`/posts/${postId}/like`, { method: "DELETE" });
 }

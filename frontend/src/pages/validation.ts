@@ -67,3 +67,10 @@ export function validatePostBody(value: string): string | undefined {
   if (countChars(value) > 280) return "本文は280文字以内で入力してください";
   return undefined;
 }
+
+/** コメント本文（SC-04）。バックエンドの CreateCommentRequest と同じメッセージにする */
+export function validateCommentBody(value: string): string | undefined {
+  if (!trim(value)) return "コメントを入力してください";
+  if (countChars(value) > 280) return "コメントは280文字以内で入力してください";
+  return undefined;
+}

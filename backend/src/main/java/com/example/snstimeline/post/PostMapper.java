@@ -49,4 +49,16 @@ public interface PostMapper {
 
   /** #9 論理削除。updateBody と同じ理由で WHERE に user_id を含めない。 */
   int softDelete(@Param("id") Long id);
+
+  /**
+   * コメント登録時のカウンタ更新（D-01）。{@code comment_count} は posts の列なので、 comments テーブルの担当である CommentMapper
+   * ではなくここに置く。
+   */
+  int incrementCommentCount(@Param("id") Long id);
+
+  /** コメント削除時のカウンタ更新。CommentService から同一トランザクションで呼ばれる。 */
+  int decrementCommentCount(@Param("id") Long id);
+
+  /** 更新後の実カウントを引き直す（#11 / #13 のレスポンス用）。 */
+  int findCommentCount(@Param("id") Long id);
 }

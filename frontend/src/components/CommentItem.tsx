@@ -1,0 +1,82 @@
+import { useEffect, useRef, useState } from "react";
+import type { Comment } from "../api/types";
+import { formatRelative } from "../utils/datetime";
+import { Avatar } from "./Avatar";
+
+type Props = {
+  comment: Comment;
+  onDelete: (comment: Comment) => void;
+};
+
+/**
+ * コメント1件（SC-04、mockup/mock.js commentHtml）。
+ *
+ * [⋯] メニューは自分のコメントのみ、削除ボタンのみ（編集はPhase2のため無し）。
+ * 外側クリック＋Escapeで閉じるパターンは PostCard.tsx と同じ（D-35、2箇所目は重複を許容）。
+ */
+export function CommentItem({ comment, onDelete }: Props) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsMenuOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isMenuOpen]);
+
+  return (
+    <div className="comment-item">
+      <Avatar user={comment.author} size="sm" />
+      <div className="comment-main">
+        <div className="post-head">
+          <span className="name">{comment.author.displayName}</span>
+          <span className="handle">@{comment.author.username}</span>
+          <span className="handle">・</span>
+          <span className="time">{formatRelative(comment.createdAt)}</span>
+          <span className="spacer" />
+          {comment.isMine && (
+            <div className="more-menu" ref={menuRef}>
+              <button
+                className="more-btn"
+                type="button"
+                onClick={() => setIsMenuOpen((prev) => !prev)}
+                aria-haspopup="menu"
+                aria-expanded={isMenuOpen}
+                aria-label="メニュー"
+              >
+                ⋯
+              </button>
+              <div className={isMenuOpen ? "dropdown is-open" : "dropdown"} role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onDelete(comment);
+                  }}
+                >
+                  <span aria-hidden="true">🗑</span> 削除
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <p className="comment-text">{comment.body}</p>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.snstimeline.post.LikeMapper">
+
+  <!--
+    値の埋め込みは必ず #{}（プリペアドステートメント、docs/06_non_functional.md 3.7）。
+    UNIQUE制約 uq_likes_post_user への違反は DuplicateKeyException として
+    LikeService が捕捉する（docs/09_decision_log.md D-34）。ここでは投げっぱなしにする。
+  -->
+  <insert id="insert">
+    INSERT INTO likes (post_id, user_id) VALUES (#{postId}, #{userId})
+  </insert>
+
+  <!-- 物理削除（D-02）。affected rows が0なら「元々いいねしていなかった」= 冪等に成功扱い -->
+  <delete id="delete">
+    DELETE FROM likes WHERE post_id = #{postId} AND user_id = #{userId}
+  </delete>
+
+  <update id="incrementLikeCount">
+    UPDATE posts SET like_count = like_count + 1, updated_at = now() WHERE id = #{postId}
+  </update>
+
+  <update id="decrementLikeCount">
+    UPDATE posts SET like_count = like_count - 1, updated_at = now() WHERE id = #{postId}
+  </update>
+
+  <select id="findLikeCount" resultType="int">
+    SELECT like_count FROM posts WHERE id = #{postId}
+  </select>
+
+  <!--
+    isLikedByMe の一括判定（docs/04_data_model.md 5.3）。
+    idx_likes_user_post (user_id, post_id) を使う。postIds が空の場合は
+    LikeMapper 呼び出し元でガードし、このSQLを発行しないこと。
+  -->
+  <select id="findLikedPostIds" resultType="long">
+    SELECT post_id FROM likes
+    WHERE user_id = #{userId}
+      AND post_id IN
+      <foreach collection="postIds" item="postId" open="(" separator="," close=")">
+        #{postId}
+      </foreach>
+  </select>
+
+</mapper>
