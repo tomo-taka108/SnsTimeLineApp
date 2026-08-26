@@ -16,6 +16,7 @@ public final class ValidationConstants {
   public static final int DISPLAY_NAME_MAX = 50;
   public static final int BIO_MAX = 160;
   public static final int POST_BODY_MAX = 280;
+  public static final int COMMENT_BODY_MAX = 280;
 
   /** ユーザー名は半角英数字とアンダースコアのみ。DBの ck_users_username_format と同じ。 */
   public static final String USERNAME_PATTERN = "^[a-zA-Z0-9_]+$";

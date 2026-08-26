@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.snstimeline.comment.CommentMapper">
+
+  <!--
+    論理削除の除外条件。各マッパーXMLが自前で定義する（PostMapper.xml と同じ規約、
+    docs/09_decision_log.md D-25）。部分インデックス idx_comments_post_created が
+    使われるためにも必須。
+  -->
+  <sql id="activeOnly">c.deleted_at IS NULL</sql>
+
+  <sql id="commentColumns">
+    c.id, c.post_id, c.user_id, c.body, c.created_at, c.updated_at, c.edited_at, c.deleted_at
+  </sql>
+
+  <!--
+    コメント1行分。author は JOIN で同時に取る（N+1回避）。
+    resultMap ではなくフラットな CommentRow に受け、CommentSummary への組み立ては
+    Service で行う（docs/09_decision_log.md D-32）。
+  -->
+  <sql id="rowColumns">
+    c.id, c.body, c.created_at, c.edited_at,
+    u.id             AS author_id,
+    u.username       AS author_username,
+    u.display_name   AS author_display_name,
+    u.avatar_file_id AS author_avatar_file_id
+  </sql>
+
+  <!--
+    #10 コメント一覧（docs/05_api_design.md #10）。
+
+    タイムラインとは逆に古い順（ASC）。カーソルの比較も
+    (c.created_at, c.id) &gt; (:cursorCreatedAt, :cursorId) と不等号の向きが逆になる点に注意。
+  -->
+  <select id="findByPostId" resultType="com.example.snstimeline.comment.CommentRow">
+    SELECT <include refid="rowColumns"/>
+    FROM comments c
+    JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
+    WHERE c.post_id = #{postId}
+      AND <include refid="activeOnly"/>
+    <if test="cursorCreatedAt != null">
+      AND (c.created_at, c.id) &gt; (#{cursorCreatedAt}, #{cursorId})
+    </if>
+    ORDER BY c.created_at ASC, c.id ASC
+    LIMIT #{limit}
+  </select>
+
+  <select id="findRowById" resultType="com.example.snstimeline.comment.CommentRow">
+    SELECT <include refid="rowColumns"/>
+    FROM comments c
+    JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
+    WHERE c.id = #{id}
+      AND <include refid="activeOnly"/>
+  </select>
+
+  <select id="findById" resultType="com.example.snstimeline.comment.Comment">
+    SELECT <include refid="commentColumns"/>
+    FROM comments c
+    WHERE c.id = #{id}
+      AND <include refid="activeOnly"/>
+  </select>
+
+  <!--
+    値の埋め込みは必ず #{}（プリペアドステートメント、docs/06_non_functional.md 3.7）。
+    record は不変でキーを書き戻せないため RETURNING id で受ける（PostMapper.xml と同じ、D-25）。
+  -->
+  <select id="insert" resultType="java.lang.Long">
+    INSERT INTO comments (post_id, user_id, body)
+    VALUES (#{postId}, #{userId}, #{body})
+    RETURNING id
+  </select>
+
+  <update id="softDelete">
+    UPDATE comments
+    SET deleted_at = now(), updated_at = now()
+    WHERE id = #{id}
+      AND deleted_at IS NULL
+  </update>
+
+</mapper>

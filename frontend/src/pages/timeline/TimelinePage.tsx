@@ -162,7 +162,13 @@ export function TimelinePage() {
 
         {status === "ready" &&
           posts.map((post) => (
-            <PostCard key={post.id} post={post} onEdit={setEditingPost} onDelete={setDeletingPost} />
+            <PostCard
+              key={post.id}
+              post={post}
+              onEdit={setEditingPost}
+              onDelete={setDeletingPost}
+              onLikeChange={timeline.replacePost}
+            />
           ))}
 
         {status === "ready" && posts.length > 0 && (

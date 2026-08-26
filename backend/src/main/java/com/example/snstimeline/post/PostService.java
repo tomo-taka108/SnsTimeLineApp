@@ -9,7 +9,9 @@ import com.example.snstimeline.common.NotFoundException;
 import com.example.snstimeline.post.dto.CreatePostRequest;
 import com.example.snstimeline.post.dto.PostSummary;
 import com.example.snstimeline.post.dto.UpdatePostRequest;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,16 +25,17 @@ public class PostService {
   private static final int LIMIT_DEFAULT = 20;
 
   private final PostMapper postMapper;
+  private final LikeMapper likeMapper;
 
-  public PostService(PostMapper postMapper) {
+  public PostService(PostMapper postMapper, LikeMapper likeMapper) {
     this.postMapper = postMapper;
+    this.likeMapper = likeMapper;
   }
 
   /**
    * #5 タイムライン取得（F-TL-01, F-TL-02, F-TL-03）。
    *
-   * <p>SQL発行は1本のみ（author を JOIN しているため）。いいね判定は今回未実装なので、 docs/06_non_functional.md 1.3
-   * の「3回以内」という予算に対して余裕がある。
+   * <p>タイムライン本体はJOIN1本、いいね判定は一括取得で1本の計2本 （docs/06_non_functional.md 1.3 の「3回以内」に対して余裕がある）。
    */
   @Transactional(readOnly = true)
   public CursorPage<PostSummary> getTimeline(
@@ -49,7 +52,9 @@ public class PostService {
 
     boolean hasNext = rows.size() > limit;
     List<PostRow> page = hasNext ? rows.subList(0, limit) : rows;
-    List<PostSummary> items = page.stream().map(PostSummary::from).toList();
+    Set<Long> likedPostIds = likedPostIdsOf(meId, page.stream().map(PostRow::id).toList());
+    List<PostSummary> items =
+        page.stream().map(row -> PostSummary.from(row, likedPostIds.contains(row.id()))).toList();
 
     if (!hasNext || page.isEmpty()) {
       return CursorPage.last(items);
@@ -57,6 +62,18 @@ public class PostService {
     PostRow last = page.get(page.size() - 1);
     String nextCursor = CursorCodec.encode(last.createdAt(), last.id());
     return CursorPage.hasNext(items, nextCursor);
+  }
+
+  /**
+   * 「自分がいいね済みの投稿ID」を一括取得する（docs/04_data_model.md 5.3、N+1回避）。
+   *
+   * <p>投稿1件ごとに問い合わせず、表示する投稿ID群に対して1回のクエリで済ませる。
+   */
+  private Set<Long> likedPostIdsOf(Long meId, List<Long> postIds) {
+    if (postIds.isEmpty()) {
+      return Set.of();
+    }
+    return new HashSet<>(likeMapper.findLikedPostIds(meId, postIds));
   }
 
   /**
@@ -79,14 +96,16 @@ public class PostService {
         postMapper
             .findRowById(newId)
             .orElseThrow(() -> new IllegalStateException("投稿の作成直後に取得できませんでした。id=" + newId));
-    return PostSummary.from(row);
+    // 作成直後の自分の投稿に、自分がいいね済みのはずがないため false 固定でよい
+    return PostSummary.from(row, false);
   }
 
   /** #7 投稿詳細取得（F-PO-03）。 */
   @Transactional(readOnly = true)
   public PostSummary getById(Long meId, Long postId) {
     PostRow row = postMapper.findRowById(postId).orElseThrow(NotFoundException::new);
-    return PostSummary.from(row);
+    boolean isLiked = likedPostIdsOf(meId, List.of(row.id())).contains(row.id());
+    return PostSummary.from(row, isLiked);
   }
 
   /**
@@ -111,7 +130,8 @@ public class PostService {
     }
 
     PostRow row = postMapper.findRowById(postId).orElseThrow(NotFoundException::new);
-    return PostSummary.from(row);
+    boolean isLiked = likedPostIdsOf(meId, List.of(row.id())).contains(row.id());
+    return PostSummary.from(row, isLiked);
   }
 
   /** #9 投稿削除（F-PO-05）。認可の順序は update と同じ（D-14）。 */

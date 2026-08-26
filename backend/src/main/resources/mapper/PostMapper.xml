@@ -116,4 +116,20 @@
       AND deleted_at IS NULL
   </update>
 
+  <!--
+    コメントのカウンタ更新（docs/09_decision_log.md D-01）。
+    相対更新（= comment_count + 1）で、CommentService から同一トランザクションで呼ぶ。
+  -->
+  <update id="incrementCommentCount">
+    UPDATE posts SET comment_count = comment_count + 1, updated_at = now() WHERE id = #{id}
+  </update>
+
+  <update id="decrementCommentCount">
+    UPDATE posts SET comment_count = comment_count - 1, updated_at = now() WHERE id = #{id}
+  </update>
+
+  <select id="findCommentCount" resultType="int">
+    SELECT comment_count FROM posts WHERE id = #{id}
+  </select>
+
 </mapper>

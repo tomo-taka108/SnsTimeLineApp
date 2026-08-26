@@ -737,6 +737,48 @@ D-06はカーソルを `{"c":"<ISO8601 UTC 秒精度>","i":<id>}` と定めて�
 
 ---
 
+## D-34 いいねの冪等性は事前SELECTで確保する（`DuplicateKeyException` 捕捉は不採用）
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-25 |
+| **論点** | いいねAPI（#14）の二重登録（`uq_likes_post_user` 違反）をどう冪等に処理するか |
+| **選択肢** | A. `GlobalExceptionHandler` の `DataIntegrityViolationException` ハンドラに任せる / B. `LikeService` 内で `DuplicateKeyException` を個別に捕捉する（`AuthService.signup` と同じパターン） / **C. INSERT前に `LikeMapper.exists` で存在確認する** |
+| **決定** | **C** |
+| **状態** | 決定済み（B案は実装・動作確認の結果、不採用と判明） |
+
+**理由**
+
+既存の `GlobalExceptionHandler.handleDataIntegrity` は認証機能（signup）専用の保険ハンドラで、`EMAIL_ALREADY_EXISTS` 固定でエラーを返す。いいねの二重登録をここに落とすと「いいね済みなのにメール重複エラー」という誤った応答になるため、A案は採らない。
+
+**B案（`AuthService.signup` と同じ `DuplicateKeyException` 捕捉）は、実装して動作確認したところ500エラーになることが判明した。** PostgreSQLは制約違反が起きたトランザクションを「中断状態」にし、Javaで例外を捕捉しても**同一トランザクション内の以降の文をすべて拒否する**。`signup` は違反を検知したらそのまま例外を投げて終了するため問題にならないが、いいねは「重複を無視してカウントを返す」という**その後の処理が続く**冪等API であるため、この違いが致命的だった（`likeMapper.findLikeCount` が `current transaction is aborted` で失敗し500になった）。
+
+`@Transactional(propagation = REQUIRES_NEW)` で挿入だけを別トランザクションに分離する案も検討したが、同一クラス内の自己呼び出しはSpringのプロキシ機構をバイパスし、`REQUIRES_NEW` が効かない（プロキシを経由しないメソッド呼び出しはAOPアドバイスの対象外になる）ため、これも避けた。
+
+**結果、C案（INSERT前に存在確認）を採用する。** TOCTOU（確認直後に他リクエストが挿入する競合）は理論上残るが、UNIQUE制約が最後の砦として機能し、その場合のみ500になる。個人が単一ボタンを連打する程度の同時実行では起きない極めて稀なケースであり、事前確認で実用上十分に防げる。
+
+**影響範囲**: バックエンド実装（`post/LikeMapper.java`, `post/LikeMapper.xml`, `post/LikeService.java`）
+
+---
+
+## D-35 小規模な重複ロジックは2箇所目まで共通化しない
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-25 |
+| **論点** | コメント機能の実装で、`[⋯]` メニューの外側クリック検知（`PostCard`/`CommentItem`）と、`limit` クランプ処理（`PostService`/`CommentService`）が2箇所で重複した。共通化すべきか |
+| **選択肢** | A. 今すぐ `useDropdownMenu` フックや共通バリデーションヘルパーに切り出す / **B. 2箇所目は重複を許容し、3箇所目が出た時点で切り出しを検討する** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+2箇所だけの重複に対して共通化すると、将来「タイムラインとコメントで `limit` の上限を別々に変えたくなった」ような場面で、共通化そのものが変更の足かせになりうる。3箇所目（例: プロフィールの投稿一覧、いいねしたユーザー一覧）が出た時点で、実際のパターンの共通部分を見ながら切り出す方が無理がない。
+
+**影響範囲**: フロントエンド実装（`components/PostCard.tsx`, `components/CommentItem.tsx`）/ バックエンド実装（`post/PostService.java`, `comment/CommentService.java`）
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

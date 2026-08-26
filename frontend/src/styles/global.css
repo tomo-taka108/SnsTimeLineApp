@@ -1,10 +1,10 @@
 /*
  * 全体で使うスタイル。
  *
- * mockup/common.css から、認証画面・ヘッダー・トースト・タイムライン・投稿詳細に
- * 必要な部分だけを移植した。デザイントークン（:root）はモックアップのものをそのまま採用する。
- * モック専用の .mock-banner / .note-box / .img-a〜d（画像プレースホルダ）/
- * .comment-form（コメント機能未実装）は持ち込まない。
+ * mockup/common.css から、認証画面・ヘッダー・トースト・タイムライン・投稿詳細・
+ * コメント・いいねに必要な部分を移植した。デザイントークン（:root）はモックアップのものを
+ * そのまま採用する。モック専用の .mock-banner / .note-box / .img-a〜d（画像プレースホルダ）は
+ * 持ち込まない。
  * .new-posts-pill はモックアップに無い、今回追加した新着通知バナー用（D-31）。
  */
 
@@ -144,7 +144,8 @@ button {
   color: var(--color-danger);
 }
 
-.input {
+.input,
+.textarea {
   width: 100%;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
@@ -158,20 +159,29 @@ button {
     box-shadow 0.15s;
 }
 
-.input:focus {
+.input:focus,
+.textarea:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-soft);
 }
 
-.input:disabled {
+.input:disabled,
+.textarea:disabled {
   background: var(--color-bg-sub);
   color: var(--color-text-sub);
   cursor: not-allowed;
 }
 
-.input.is-error {
+.input.is-error,
+.textarea.is-error {
   border-color: var(--color-danger);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 92px;
+  line-height: 1.6;
 }
 
 /* バリデーションエラーは該当フィールドの直下に赤字で出す（docs/03_screen_design.md 8章） */
@@ -1056,6 +1066,53 @@ button {
   display: flex;
   justify-content: space-around;
   padding: 6px 0;
+}
+
+.section-bar {
+  padding: 12px 16px;
+  font-weight: 800;
+  font-size: 15px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-sub);
+}
+
+/* コメント入力欄（SC-04） */
+.comment-form {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 8px solid var(--color-bg-sub);
+  align-items: flex-start;
+}
+
+.comment-form .grow {
+  flex: 1;
+}
+
+.comment-form-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.comment-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.comment-item .comment-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-item .comment-text {
+  margin-top: 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ===== レスポンシブ ===== */
