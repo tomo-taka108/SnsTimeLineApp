@@ -737,21 +737,27 @@ D-06はカーソルを `{"c":"<ISO8601 UTC 秒精度>","i":<id>}` と定めて�
 
 ---
 
-## D-34 いいねのUNIQUE制約違反は保険ハンドラに委ねず個別に捕捉する
+## D-34 いいねの冪等性は事前SELECTで確保する（`DuplicateKeyException` 捕捉は不採用）
 
 | 項目 | 内容 |
 |---|---|
 | **日付** | 2026-08-25 |
-| **論点** | いいねAPI（#14）の二重登録（`uq_likes_post_user` 違反）をどこで冪等に処理するか |
-| **選択肢** | A. `GlobalExceptionHandler` の `DataIntegrityViolationException` ハンドラに任せる / **B. `LikeService` 内で `DuplicateKeyException` を個別に捕捉する** |
-| **決定** | **B** |
-| **状態** | 決定済み |
+| **論点** | いいねAPI（#14）の二重登録（`uq_likes_post_user` 違反）をどう冪等に処理するか |
+| **選択肢** | A. `GlobalExceptionHandler` の `DataIntegrityViolationException` ハンドラに任せる / B. `LikeService` 内で `DuplicateKeyException` を個別に捕捉する（`AuthService.signup` と同じパターン） / **C. INSERT前に `LikeMapper.exists` で存在確認する** |
+| **決定** | **C** |
+| **状態** | 決定済み（B案は実装・動作確認の結果、不採用と判明） |
 
 **理由**
 
-既存の `GlobalExceptionHandler.handleDataIntegrity` は認証機能（signup）専用の保険ハンドラで、`EMAIL_ALREADY_EXISTS` 固定でエラーを返す。いいねの二重登録をここに落とすと「いいね済みなのにメール重複エラー」という誤った応答になる。いいねは**冪等**（`docs/05_api_design.md` #14）であるべきで、そもそも例外として扱わず `200 OK` を返す必要があるため、`AuthService.signup` と同じパターン（`DuplicateKeyException` をその場で捕捉）を `LikeService.like` で踏襲する。
+既存の `GlobalExceptionHandler.handleDataIntegrity` は認証機能（signup）専用の保険ハンドラで、`EMAIL_ALREADY_EXISTS` 固定でエラーを返す。いいねの二重登録をここに落とすと「いいね済みなのにメール重複エラー」という誤った応答になるため、A案は採らない。
 
-**影響範囲**: バックエンド実装（`post/LikeService.java`）
+**B案（`AuthService.signup` と同じ `DuplicateKeyException` 捕捉）は、実装して動作確認したところ500エラーになることが判明した。** PostgreSQLは制約違反が起きたトランザクションを「中断状態」にし、Javaで例外を捕捉しても**同一トランザクション内の以降の文をすべて拒否する**。`signup` は違反を検知したらそのまま例外を投げて終了するため問題にならないが、いいねは「重複を無視してカウントを返す」という**その後の処理が続く**冪等API であるため、この違いが致命的だった（`likeMapper.findLikeCount` が `current transaction is aborted` で失敗し500になった）。
+
+`@Transactional(propagation = REQUIRES_NEW)` で挿入だけを別トランザクションに分離する案も検討したが、同一クラス内の自己呼び出しはSpringのプロキシ機構をバイパスし、`REQUIRES_NEW` が効かない（プロキシを経由しないメソッド呼び出しはAOPアドバイスの対象外になる）ため、これも避けた。
+
+**結果、C案（INSERT前に存在確認）を採用する。** TOCTOU（確認直後に他リクエストが挿入する競合）は理論上残るが、UNIQUE制約が最後の砦として機能し、その場合のみ500になる。個人が単一ボタンを連打する程度の同時実行では起きない極めて稀なケースであり、事前確認で実用上十分に防げる。
+
+**影響範囲**: バックエンド実装（`post/LikeMapper.java`, `post/LikeMapper.xml`, `post/LikeService.java`）
 
 ---
 

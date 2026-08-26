@@ -9,10 +9,16 @@ import org.apache.ibatis.annotations.Param;
 public interface LikeMapper {
 
   /**
-   * #14 いいね登録。UNIQUE制約（uq_likes_post_user）違反時は {@link
-   * org.springframework.dao.DuplicateKeyException} を LikeService 側で捕捉する（D-34）。
+   * #14 いいね登録。
+   *
+   * <p>呼び出し前に {@link #exists} で存在確認し、TOCTOU（確認後の競合）はDBのUNIQUE制約
+   * （uq_likes_post_user）に委ねる。PostgreSQLは制約違反が起きたトランザクションを中断状態にし、
+   * Java側で例外を捕捉しても同一トランザクション内の以降の文がすべて失敗するため、事前確認で 重複をほぼ防いだ上で使う（docs/09_decision_log.md D-34）。
    */
   int insert(@Param("postId") Long postId, @Param("userId") Long userId);
+
+  /** 既にいいね済みかどうか（冪等性の判定用）。 */
+  boolean exists(@Param("postId") Long postId, @Param("userId") Long userId);
 
   /** #15 いいね解除。物理削除（docs/09_decision_log.md D-02）。 */
   int delete(@Param("postId") Long postId, @Param("userId") Long userId);

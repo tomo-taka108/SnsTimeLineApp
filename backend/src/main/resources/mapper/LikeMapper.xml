@@ -4,14 +4,19 @@
 
 <mapper namespace="com.example.snstimeline.post.LikeMapper">
 
-  <!--
-    値の埋め込みは必ず #{}（プリペアドステートメント、docs/06_non_functional.md 3.7）。
-    UNIQUE制約 uq_likes_post_user への違反は DuplicateKeyException として
-    LikeService が捕捉する（docs/09_decision_log.md D-34）。ここでは投げっぱなしにする。
-  -->
+  <!-- 値の埋め込みは必ず #{}（プリペアドステートメント、docs/06_non_functional.md 3.7）。 -->
   <insert id="insert">
     INSERT INTO likes (post_id, user_id) VALUES (#{postId}, #{userId})
   </insert>
+
+  <!--
+    冪等性の判定用（docs/09_decision_log.md D-34）。INSERT前にこれで存在確認する。
+    PostgreSQLは制約違反が起きたトランザクションを中断状態にするため、
+    UNIQUE制約違反を実行時に捕捉して回復する設計は取らず、事前確認で重複を避ける。
+  -->
+  <select id="exists" resultType="boolean">
+    SELECT EXISTS (SELECT 1 FROM likes WHERE post_id = #{postId} AND user_id = #{userId})
+  </select>
 
   <!-- 物理削除（D-02）。affected rows が0なら「元々いいねしていなかった」= 冪等に成功扱い -->
   <delete id="delete">

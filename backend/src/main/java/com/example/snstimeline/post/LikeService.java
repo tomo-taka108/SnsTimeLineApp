@@ -2,7 +2,6 @@ package com.example.snstimeline.post;
 
 import com.example.snstimeline.common.NotFoundException;
 import com.example.snstimeline.post.dto.LikeResponse;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,18 +28,17 @@ public class LikeService {
   /**
    * #14 いいね（F-LK-01）。冪等: 既にいいね済みでも {@code 200 OK} を返し、カウンタは増やさない。
    *
-   * <p>UNIQUE制約違反（{@link DuplicateKeyException}）を捕捉して実現する。 {@code GlobalExceptionHandler}
-   * の保険ハンドラは認証機能専用（{@code EMAIL_ALREADY_EXISTS} 固定）のため、 ここで個別に捕捉する（docs/09_decision_log.md D-34）。
+   * <p>事前に {@link LikeMapper#exists} で確認してから INSERT する（docs/09_decision_log.md D-34）。
+   * PostgreSQLは制約違反が起きたトランザクションを「中断状態」にし、Java側で例外を捕まえても
+   * 同じトランザクション内の以降の文がすべて失敗するため、UNIQUE制約違反を実行時に捕捉して 回復する設計は取らず、事前確認で重複を避ける。
    */
   @Transactional
   public LikeResponse like(Long meId, Long postId) {
     postMapper.findById(postId).orElseThrow(NotFoundException::new);
 
-    try {
+    if (!likeMapper.exists(postId, meId)) {
       likeMapper.insert(postId, meId);
       likeMapper.incrementLikeCount(postId);
-    } catch (DuplicateKeyException e) {
-      // 既にいいね済み。カウンタは更新せず200を返す（冪等性）
     }
     return new LikeResponse(likeMapper.findLikeCount(postId), true);
   }
