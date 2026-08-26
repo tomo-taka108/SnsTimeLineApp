@@ -4,17 +4,20 @@ import { RedirectIfAuthed } from "./auth/RedirectIfAuthed";
 import { RequireAuth } from "./auth/RequireAuth";
 import { useAuth } from "./auth/useAuth";
 import { useToast } from "./components/useToast";
+import { FollowListPage } from "./pages/follow/FollowListPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
+import { ProfileEditPage } from "./pages/profile/ProfileEditPage";
+import { ProfilePage } from "./pages/profile/ProfilePage";
 import { SignupPage } from "./pages/SignupPage";
 import { TimelinePage } from "./pages/timeline/TimelinePage";
 
 /**
  * ルート定義（docs/03_screen_design.md 2章の画面一覧に対応）。
  *
- * 今回実装するのは SC-01 / SC-02 / SC-03 / SC-04 / SC-12。
- * プロフィール・検索などは未実装のため、SC-12 に落ちる。
+ * 実装済みは SC-01 / SC-02 / SC-03 / SC-04 / SC-05 / SC-06 / SC-08 / SC-09 / SC-12。
+ * ユーザー検索（SC-07, Phase2）といいねしたユーザー一覧（SC-10, Phase2）は未実装のため SC-12 に落ちる。
  */
 export function App() {
   const { sessionExpired, clearSessionExpired } = useAuth();
@@ -60,6 +63,38 @@ export function App() {
         element={
           <RequireAuth>
             <PostDetailPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/users/:userId"
+        element={
+          <RequireAuth>
+            <ProfilePage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/users/:userId/following"
+        element={
+          <RequireAuth>
+            <FollowListPage mode="following" />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/users/:userId/followers"
+        element={
+          <RequireAuth>
+            <FollowListPage mode="followers" />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings/profile"
+        element={
+          <RequireAuth>
+            <ProfileEditPage />
           </RequireAuth>
         }
       />

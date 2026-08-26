@@ -17,7 +17,7 @@ public interface UserMapper {
   /** ログイン用。論理削除済みユーザーは取得しない。 */
   Optional<User> findByEmail(@Param("email") String email);
 
-  /** /auth/me 用。論理削除済みユーザーは取得しない。 */
+  /** /auth/me 用。論理削除済みユーザーは取得しない。#17 プロフィール取得でも使う。 */
   Optional<User> findById(@Param("id") Long id);
 
   /**
@@ -36,4 +36,25 @@ public interface UserMapper {
    * <p>User が record（不変）でありキーを書き戻せないため、{@code RETURNING id} で受け取る。
    */
   Long insert(@Param("user") User user);
+
+  /**
+   * #18 プロフィールの投稿数（docs/05_api_design.md UserProfile.postCount）。
+   *
+   * <p>非正規化カウンタは持たず都度 {@code COUNT(*)} で算出する（docs/09_decision_log.md D-36）。 {@code
+   * idx_posts_user_created} で索引だけで数えられる。
+   */
+  int countPosts(@Param("userId") Long userId);
+
+  /**
+   * #19 プロフィール編集。送られたフィールドのみ更新する。
+   *
+   * @param displayName null なら変更しない
+   * @param bioProvided true なら bio カラムを更新する（bio 自体が null でも「削除」として書き込む）
+   * @param bio bioProvided が false のときは無視される
+   */
+  int updateProfile(
+      @Param("userId") Long userId,
+      @Param("displayName") String displayName,
+      @Param("bioProvided") boolean bioProvided,
+      @Param("bio") String bio);
 }

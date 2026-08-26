@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.snstimeline.follow.FollowMapper">
+
+  <!--
+    フォロー一覧1行分。相手ユーザーの情報をJOINで同時に取る（N+1回避）。
+    resultMap ではなくフラットな FollowRow に受け、UserListItem への組み立ては
+    Service で行う（docs/09_decision_log.md D-32）。
+    退会済みユーザーは一覧から除くため u.deleted_at IS NULL を明示する
+    （follows 自体は物理削除のテーブルなので activeOnly は無い、D-02）。
+  -->
+  <sql id="rowColumns">
+    f.id AS follow_id, f.created_at AS follow_created_at,
+    u.id AS user_id, u.username, u.display_name, u.bio, u.avatar_file_id,
+    u.created_at AS user_created_at
+  </sql>
+
+  <insert id="insert">
+    INSERT INTO follows (follower_id, followee_id) VALUES (#{followerId}, #{followeeId})
+  </insert>
+
+  <!--
+    冪等性の判定用（docs/09_decision_log.md D-34, D-37）。INSERT前にこれで存在確認する。
+    PostgreSQLは制約違反が起きたトランザクションを中断状態にするため、
+    UNIQUE制約違反を実行時に捕捉して回復する設計は取らない。
+  -->
+  <select id="exists" resultType="boolean">
+    SELECT EXISTS (
+      SELECT 1 FROM follows WHERE follower_id = #{followerId} AND followee_id = #{followeeId}
+    )
+  </select>
+
+  <!-- 物理削除（D-02）。affected rows が0なら「元々フォローしていなかった」= 冪等に成功扱い -->
+  <delete id="delete">
+    DELETE FROM follows WHERE follower_id = #{followerId} AND followee_id = #{followeeId}
+  </delete>
+
+  <select id="countFollowers" resultType="int">
+    SELECT COUNT(*) FROM follows WHERE followee_id = #{userId}
+  </select>
+
+  <select id="countFollowing" resultType="int">
+    SELECT COUNT(*) FROM follows WHERE follower_id = #{userId}
+  </select>
+
+  <!--
+    #23 フォロー中一覧（docs/05_api_design.md #23）。
+    idx_follows_follower (follower_id, followee_id) で follower_id を絞り込み、
+    (f.created_at, f.id) の行値比較でカーソルを進める（フォローした新しい順、降順）。
+  -->
+  <select id="findFollowing" resultType="com.example.snstimeline.follow.FollowRow">
+    SELECT <include refid="rowColumns"/>
+    FROM follows f
+    JOIN users u ON u.id = f.followee_id AND u.deleted_at IS NULL
+    WHERE f.follower_id = #{userId}
+    <if test="cursorCreatedAt != null">
+      AND (f.created_at, f.id) &lt; (#{cursorCreatedAt}, #{cursorId})
+    </if>
+    ORDER BY f.created_at DESC, f.id DESC
+    LIMIT #{limit}
+  </select>
+
+  <!--
+    #24 フォロワー一覧（docs/05_api_design.md #24）。
+    idx_follows_followee (followee_id, follower_id) で followee_id を絞り込む。
+  -->
+  <select id="findFollowers" resultType="com.example.snstimeline.follow.FollowRow">
+    SELECT <include refid="rowColumns"/>
+    FROM follows f
+    JOIN users u ON u.id = f.follower_id AND u.deleted_at IS NULL
+    WHERE f.followee_id = #{userId}
+    <if test="cursorCreatedAt != null">
+      AND (f.created_at, f.id) &lt; (#{cursorCreatedAt}, #{cursorId})
+    </if>
+    ORDER BY f.created_at DESC, f.id DESC
+    LIMIT #{limit}
+  </select>
+
+  <!--
+    isFollowing の一括判定（docs/04_data_model.md 6.6）。
+    idx_follows_follower (follower_id, followee_id) を使う。userIds が空の場合は
+    呼び出し元でガードし、このSQLを発行しないこと（LikeMapper.findLikedPostIds と同じ規約）。
+  -->
+  <select id="findFollowedUserIds" resultType="long">
+    SELECT followee_id FROM follows
+    WHERE follower_id = #{meId}
+      AND followee_id IN
+      <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+        #{userId}
+      </foreach>
+  </select>
+
+</mapper>

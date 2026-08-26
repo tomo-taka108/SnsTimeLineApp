@@ -2,9 +2,9 @@
  * 全体で使うスタイル。
  *
  * mockup/common.css から、認証画面・ヘッダー・トースト・タイムライン・投稿詳細・
- * コメント・いいねに必要な部分を移植した。デザイントークン（:root）はモックアップのものを
- * そのまま採用する。モック専用の .mock-banner / .note-box / .img-a〜d（画像プレースホルダ）は
- * 持ち込まない。
+ * コメント・いいね・プロフィール・フォロー一覧に必要な部分を移植した。デザイントークン
+ * （:root）はモックアップのものをそのまま採用する。モック専用の .mock-banner / .note-box /
+ * .img-a〜d（画像プレースホルダ）は持ち込まない。
  * .new-posts-pill はモックアップに無い、今回追加した新着通知バナー用（D-31）。
  */
 
@@ -251,10 +251,36 @@ button {
   color: #fff;
 }
 
+/* フォローボタンの未フォロー状態（黒塗り、mockup/common.css）。.btn-accent とは別の見た目 */
+.btn-primary {
+  background: var(--color-text);
+  color: #fff;
+}
+
 .btn-outline {
   background: transparent;
   color: var(--color-text);
   border-color: var(--color-border-strong);
+}
+
+/* フォロー中ボタン: ホバーで「フォロー解除」（赤）に変わる（docs/03_screen_design.md SC-05） */
+.btn-following:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: rgba(244, 33, 46, 0.08);
+  opacity: 1;
+}
+
+.btn-following:hover .label-following {
+  display: none;
+}
+
+.btn-following .label-unfollow {
+  display: none;
+}
+
+.btn-following:hover .label-unfollow {
+  display: inline;
 }
 
 .btn-block {
@@ -340,6 +366,8 @@ button {
   width: 88px;
   height: 88px;
   font-size: 34px;
+  /* プロフィールヘッダーでカバー画像に重ねるため、白枠で縁取る（.profile-top参照） */
+  border: 4px solid #fff;
 }
 
 .avatar-menu {
@@ -1115,6 +1143,118 @@ button {
   word-break: break-word;
 }
 
+/* ===== プロフィール（SC-05） ===== */
+.profile-cover {
+  height: 130px;
+  background: linear-gradient(120deg, #1d9bf0, #6c5ce7);
+}
+
+.profile-head {
+  padding: 0 16px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.profile-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  /* .avatar-lg（88px）をカバー画像に重ねる */
+  margin-top: -44px;
+  margin-bottom: 12px;
+}
+
+.profile-name {
+  font-size: 21px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.profile-handle {
+  color: var(--color-text-sub);
+  font-size: 15px;
+}
+
+.profile-bio {
+  margin: 12px 0;
+  white-space: pre-wrap;
+}
+
+.profile-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-sub);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.profile-counts {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+}
+
+.profile-counts a {
+  color: var(--color-text-sub);
+  text-decoration: none;
+}
+
+.profile-counts a:hover {
+  text-decoration: underline;
+}
+
+.profile-counts strong {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+/* ===== ユーザー行（SC-08 / SC-09 共通） ===== */
+.user-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.12s;
+}
+
+.user-row:hover {
+  background: var(--color-bg-sub);
+}
+
+.user-row .user-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-row .user-name {
+  font-weight: 700;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.user-row .user-name:hover {
+  text-decoration: underline;
+}
+
+.user-row .user-handle {
+  color: var(--color-text-sub);
+  font-size: 14px;
+}
+
+.user-row .user-bio {
+  font-size: 14px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SC-06 プロフィール編集の項目区切り */
+.divider-thick {
+  border-top: 8px solid var(--color-bg-sub);
+}
+
 /* ===== レスポンシブ ===== */
 @media (max-width: 767px) {
   body {
@@ -1152,5 +1292,9 @@ button {
 
   .detail-text {
     font-size: 17px;
+  }
+
+  .profile-counts {
+    gap: 14px;
   }
 }

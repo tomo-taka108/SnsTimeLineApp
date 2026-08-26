@@ -65,6 +65,36 @@ public class PostService {
   }
 
   /**
+   * #18 ユーザーの投稿一覧（F-US-02, F-TL-03）。getTimeline とほぼ同形で、user_id による絞り込みのみ違う。
+   *
+   * <p>存在しないユーザーの404判定は呼び出し元（{@code UserService}）が先に行う想定だが、 ここでも防御的に確認する（プロフィールを経由せず直接叩かれた場合の保険）。
+   */
+  @Transactional(readOnly = true)
+  public CursorPage<PostSummary> getUserPosts(
+      Long meId, Long userId, Integer limitParam, String cursor) {
+    int limit = clampLimit(limitParam);
+
+    CursorCodec.Cursor decoded = cursor == null ? null : CursorCodec.decode(cursor);
+    var cursorCreatedAt = decoded == null ? null : decoded.createdAt();
+    var cursorId = decoded == null ? null : decoded.id();
+
+    List<PostRow> rows = postMapper.findByUserId(userId, cursorCreatedAt, cursorId, limit + 1);
+
+    boolean hasNext = rows.size() > limit;
+    List<PostRow> page = hasNext ? rows.subList(0, limit) : rows;
+    Set<Long> likedPostIds = likedPostIdsOf(meId, page.stream().map(PostRow::id).toList());
+    List<PostSummary> items =
+        page.stream().map(row -> PostSummary.from(row, likedPostIds.contains(row.id()))).toList();
+
+    if (!hasNext || page.isEmpty()) {
+      return CursorPage.last(items);
+    }
+    PostRow last = page.get(page.size() - 1);
+    String nextCursor = CursorCodec.encode(last.createdAt(), last.id());
+    return CursorPage.hasNext(items, nextCursor);
+  }
+
+  /**
    * 「自分がいいね済みの投稿ID」を一括取得する（docs/04_data_model.md 5.3、N+1回避）。
    *
    * <p>投稿1件ごとに問い合わせず、表示する投稿ID群に対して1回のクエリで済ませる。

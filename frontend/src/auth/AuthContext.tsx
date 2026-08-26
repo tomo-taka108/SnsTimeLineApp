@@ -21,6 +21,11 @@ type AuthContextValue = {
   login: (payload: LoginPayload) => Promise<void>;
   signup: (payload: SignupPayload) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * プロフィール編集（#19）の成功時などに呼ぶ。ヘッダーのアバター・表示名は
+   * この Context の user を参照しているため、更新しないと保存後も古い表示のままになる。
+   */
+  updateUser: (user: UserSummary) => void;
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -111,9 +116,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearSessionExpired = useCallback(() => setSessionExpired(false), []);
 
+  const updateUser = useCallback((next: UserSummary) => setUser(next), []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isRestoring, sessionExpired, clearSessionExpired, login, signup, logout }),
-    [user, isRestoring, sessionExpired, clearSessionExpired, login, signup, logout],
+    () => ({
+      user,
+      isRestoring,
+      sessionExpired,
+      clearSessionExpired,
+      login,
+      signup,
+      logout,
+      updateUser,
+    }),
+    [user, isRestoring, sessionExpired, clearSessionExpired, login, signup, logout, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -7,7 +7,7 @@ import { Avatar } from "./Avatar";
  * 共通ヘッダー（docs/03_screen_design.md 4.1）。
  *
  * ログイン時のみ表示する。SC-01 / SC-02 では出さない。
- * 検索アイコンとプロフィール・設定は該当画面が未実装のため、今回は置かない。
+ * 検索アイコンは該当画面（SC-07, Phase2）が未実装のため今回は置かない。
  */
 export function AppHeader() {
   const { user, logout } = useAuth();
@@ -72,6 +72,12 @@ export function AppHeader() {
           </button>
 
           <div className={isOpen ? "dropdown is-open" : "dropdown"} role="menu">
+            <Link to={`/users/${user.id}`} role="menuitem" onClick={() => setIsOpen(false)}>
+              <span aria-hidden="true">👤</span> プロフィール
+            </Link>
+            <Link to="/settings/profile" role="menuitem" onClick={() => setIsOpen(false)}>
+              <span aria-hidden="true">⚙️</span> 設定
+            </Link>
             {/* モックでは <a> だが、ログアウトは処理を伴うので button にする */}
             <button type="button" role="menuitem" onClick={handleLogout} disabled={isLoggingOut}>
               <span aria-hidden="true">🚪</span>

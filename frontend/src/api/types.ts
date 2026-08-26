@@ -47,9 +47,10 @@ export type ErrorResponse = {
   errors?: FieldErrorItem[];
 };
 
-/** エラーコード（docs/05_api_design.md 1.3 ＋ D-29 の INVALID_REFRESH_TOKEN） */
+/** エラーコード（docs/05_api_design.md 1.3 ＋ D-29 の INVALID_REFRESH_TOKEN、D-39 の SELF_FOLLOW_NOT_ALLOWED） */
 export const ErrorCode = {
   VALIDATION_ERROR: "VALIDATION_ERROR",
+  SELF_FOLLOW_NOT_ALLOWED: "SELF_FOLLOW_NOT_ALLOWED",
   INVALID_CREDENTIALS: "INVALID_CREDENTIALS",
   UNAUTHENTICATED: "UNAUTHENTICATED",
   INVALID_REFRESH_TOKEN: "INVALID_REFRESH_TOKEN",
@@ -158,4 +159,59 @@ export type DeleteCommentResponse = {
 export type LikeResponse = {
   likeCount: number;
   isLikedByMe: boolean;
+};
+
+/**
+ * #17 プロフィール取得のレスポンス（docs/05_api_design.md 4章 UserProfile）。
+ *
+ * postCount / followingCount / followerCount は非正規化カウンタを持たず、都度算出される
+ * （docs/09_decision_log.md D-36）。
+ */
+export type UserProfile = {
+  id: number;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  postCount: number;
+  followingCount: number;
+  followerCount: number;
+  /** isMe が true の場合は常に false */
+  isFollowing: boolean;
+  isMe: boolean;
+  createdAt: string;
+};
+
+/**
+ * ユーザー一覧の1行（docs/05_api_design.md 4章 UserListItem）。
+ *
+ * SC-08（フォロー中一覧）/ SC-09（フォロワー一覧）で共通に使う（docs/09_decision_log.md D-20）。
+ */
+export type UserListItem = {
+  id: number;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  isFollowing: boolean;
+  isMe: boolean;
+};
+
+/**
+ * #19 プロフィール編集のリクエスト。
+ *
+ * bio は「送らない（変更しない）」と「null を明示的に送る（削除する）」を区別する必要があるため、
+ * キー自体を省略できるようオプショナルにする。呼び出し側は「変更しないなら bio キーを含めない
+ * オブジェクトを渡す」「削除するなら bio: null を渡す」を使い分ける
+ * （docs/05_api_design.md #19、バックエンドの UpdateProfileRequest と同じ区別）。
+ */
+export type UpdateProfilePayload = {
+  displayName?: string;
+  bio?: string | null;
+};
+
+/** #21 / #22 フォロー・フォロー解除のレスポンス */
+export type FollowResponse = {
+  isFollowing: boolean;
+  followerCount: number;
 };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { PostSummary } from "../api/types";
 import { useAuth } from "../auth/useAuth";
 import { useLike } from "../hooks/useLike";
@@ -58,14 +58,18 @@ export function PostCard({ post, onEdit, onDelete, onLikeChange }: Props) {
         if (event.key === "Enter") navigate(`/posts/${post.id}`);
       }}
     >
-      <span onClick={(event) => event.stopPropagation()}>
+      <Link to={`/users/${post.author.id}`} onClick={(event) => event.stopPropagation()}>
         <Avatar user={post.author} />
-      </span>
+      </Link>
       <div className="post-body-col">
         <div className="post-head">
-          <span className="name" onClick={(event) => event.stopPropagation()}>
+          <Link
+            className="name"
+            to={`/users/${post.author.id}`}
+            onClick={(event) => event.stopPropagation()}
+          >
             {post.author.displayName}
-          </span>
+          </Link>
           <span className="handle">@{post.author.username}</span>
           <span className="handle">・</span>
           <span className="time">{formatRelative(post.createdAt)}</span>

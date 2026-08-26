@@ -386,20 +386,25 @@ SnsTimeLineApp/
 | SC-01 | `/login` | `pages/LoginPage.tsx` | 実装済み |
 | SC-02 | `/signup` | `pages/SignupPage.tsx` | 実装済み |
 | SC-03 | `/` | `pages/timeline/TimelinePage.tsx` | 実装済み（無限スクロール・タブ・新着通知バナー） |
-| SC-04 | `/posts/:postId` | `pages/PostDetailPage.tsx` | 実装済み。**コメント欄はプレースホルダ**（コメント機能未実装） |
+| SC-04 | `/posts/:postId` | `pages/PostDetailPage.tsx` | 実装済み（コメント欄・いいねボタン含む） |
+| SC-05 | `/users/:userId` | `pages/profile/ProfilePage.tsx` | 実装済み |
+| SC-06 | `/settings/profile` | `pages/profile/ProfileEditPage.tsx` | 実装済み（プロフィール画像欄はPhase2のプレースホルダ） |
+| SC-08 | `/users/:userId/following` | `pages/follow/FollowListPage.tsx`（`mode="following"`） | 実装済み（D-39によりPhase2から前倒し） |
+| SC-09 | `/users/:userId/followers` | `pages/follow/FollowListPage.tsx`（`mode="followers"`） | 実装済み（D-39によりPhase2から前倒し） |
 | SC-12 | `*` | `pages/NotFoundPage.tsx` | 実装済み |
 
 **採用したライブラリ**: React 19 / Vite 8 / TypeScript 6 / React Router 7 / oxlint 1。
 **TanStack Query は未導入**（上表は「推奨」であり必須ではない）。データ取得は `useTimeline` フックに
 一元化し、`useState` + `useEffect` で手書きしている。
 
-**タイムライン実装で今回のスコープに含めなかったもの**:
+**現時点で今回のスコープに含めなかったもの**:
 
 | 項目 | 状態 |
 |---|---|
 | コメント編集（F-CM-03, #12） | Phase2のため未実装。投稿・表示・削除（F-CM-01, 02, 04）は実装済み |
-| 画像投稿（F-IM-01〜03） | 未着手。`PostSummary.images` は常に空配列 |
-| フォロー中タブ | `follows` テーブルとSQLは実装済みだが、フォロー登録API（#21/#22）が無いため自分の投稿のみ表示（D-11どおり） |
+| 画像投稿・プロフィール画像（F-IM-01〜03, F-US-04） | 未着手。`PostSummary.images` は常に空配列、`UserSummary.avatarUrl` / `UserProfile.avatarUrl` は常に `null` |
+| ユーザー検索（F-US-05, SC-07, #20） | Phase2のため未実装。フォロー相手はタイムラインの投稿者から辿る |
+| いいねしたユーザー一覧（F-LK-04, SC-10, #16） | Phase2のため未実装 |
 
 ### 7.2 401時の共通処理（F-CO-02）
 
@@ -449,11 +454,11 @@ localStorage のリフレッシュトークンで POST /auth/refresh
 | 2 | 認証（#1〜#3, #27, #28） | curlでJWTが取得でき、`/auth/me` が通る | **完了** |
 | 3 | 投稿作成・全体TL（#5 `tab=all`, #6, #7） | テキスト投稿がタイムラインに並ぶ | **完了。加えて編集(#8)・削除(#9)・新着件数(#29)・フォロー中タブのSQL(`tab=following`)も実装済み** |
 | 4 | フロント: ログイン + タイムライン表示 | ブラウザで一連の流れが見える | **完了**（SC-01 / SC-02 / SC-03 / SC-04 / SC-12） |
-| 5 | いいね（#14, #15） | **カウンタの整合性をここで作り込む。二重いいねのテストを必ず書く** | **完了**。二重いいねはDBのUNIQUE制約＋`DuplicateKeyException`捕捉で冪等化（D-34） |
+| 5 | いいね（#14, #15） | **カウンタの整合性をここで作り込む。二重いいねのテストを必ず書く** | **完了**。二重いいねはDBのUNIQUE制約と事前SELECTで冪等化している（D-34。`DuplicateKeyException`捕捉は実装・動作確認の結果、PostgreSQLがトランザクションを中断状態にするため不採用と判明した） |
 | 6 | コメント（#10, #11, #13） | カウンタの非対称ルールを実装 | **完了**。コメント編集（#12）はPhase2のため未実装 |
 | 7 | 画像アップロード（#25, #26） | `FileStorageService` の抽象化を最初から入れる | 未着手 |
-| 8 | フォロー + フォロー中TL（#21, #22, #5 `tab=following`） | MVPの一周が完成 | **タブとSQLは完了**。フォロー登録API（#21, #22）は未着手のため、フォロー中タブは自分の投稿のみ表示 |
-| 9 | プロフィール（#17〜#19） | | 未着手 |
+| 8 | フォロー + フォロー中TL（#21, #22, #5 `tab=following`） | MVPの一周が完成 | **完了**。フォロー登録API（#21, #22）の実装により、フォロー中タブが実際にフォロー中ユーザーの投稿を表示するようになった。冪等性はいいねと同じ事前SELECT方式（D-37） |
+| 9 | プロフィール（#17〜#19） | | **完了**（#18のユーザー投稿一覧、#23/#24のフォロー一覧も合わせて実装。D-39） |
 | 10 | 削除（#9, #13）と論理削除の徹底 | 削除済みがどこにも出ないことを確認 | **完了**（投稿削除・コメント削除ともに論理削除） |
 | 11 | 無限スクロール（カーソルページネーション） | **シードデータで25件以上の投稿を用意して確認** | **完了。カーソルの時刻精度を秒からマイクロ秒に変更した（D-33）** |
 
