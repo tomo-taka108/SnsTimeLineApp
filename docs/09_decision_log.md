@@ -779,6 +779,80 @@ D-06はカーソルを `{"c":"<ISO8601 UTC 秒精度>","i":<id>}` と定めて�
 
 ---
 
+## D-36 プロフィールのカウント（投稿数・フォロー中数・フォロワー数）は非正規化しない
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-26 |
+| **論点** | `UserProfile.postCount` / `followingCount` / `followerCount` を `users` の非正規化カウンタ列にするか、都度 `COUNT(*)` で算出するか |
+| **選択肢** | A. `users` にカウンタ列を追加し、投稿・フォローの登録/削除と同一トランザクションで相対更新する（D-01と同じ方式） / **B. カウンタ列を持たず、プロフィール取得のたびに `COUNT(*)` で算出する** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+D-01（`posts.like_count` / `comment_count`）が非正規化を選んだ理由は、「タイムライン20件それぞれに対して相関サブクエリが走ると件数増で劣化する」という**一覧のN倍化**にある。プロフィールの3つのカウントは1リクエストにつき1ユーザーぶんしか数えず、この増幅が起きない。`idx_posts_user_created` / `idx_follows_follower` / `idx_follows_followee` を使えば索引だけで数えられるため、A案の「更新漏れ・競合でズレる」リスクを負ってまで非正規化する理由が無い。
+
+**影響範囲**: `user/UserMapper.xml`（`countPosts`）/ `follow/FollowMapper.xml`（`countFollowers`, `countFollowing`）/ [04_data_model.md](04_data_model.md)（`users` にカウンタ列は追加しない）
+
+---
+
+## D-37 フォローの冪等性は事前SELECTで確保する（D-34と同じ方式をfollowsにも適用）
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-26 |
+| **論点** | `PUT /users/{userId}/follow`（#21）の冪等性を、UNIQUE制約違反（`uq_follows_follower_followee`）の捕捉で実現するか、INSERT前の事前確認で実現するか |
+| **選択肢** | A. `DuplicateKeyException` を捕捉し、カウンタを更新せず200を返す（[04_data_model.md](04_data_model.md) 3.6 と [05_api_design.md](05_api_design.md) 3.1① / D-08 の当初記述） / **B. `FollowMapper.exists` で事前確認してからINSERTする（D-34と同じ方式）** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+D-34（いいねの冪等性）で判明したとおり、PostgreSQLは制約違反が起きたトランザクションを「中断状態」にし、Java側で例外を捕捉しても同一トランザクション内の以降の文がすべて失敗する。#21 は挿入後に `followerCount` を再取得して返す設計であり、これは #14（いいね）が `findLikeCount` を再取得する構造とまったく同じであるため、同じ罠を踏む。
+
+**[04_data_model.md](04_data_model.md) 3.6 と [05_api_design.md](05_api_design.md) 3.1① / D-08 の「UNIQUE制約違反を捕捉する」という記述は、本エントリにより実質的に上書きされる。** 既存エントリは書き換えず、本エントリを正とする（CLAUDE.md 7.4）。
+
+**影響範囲**: `follow/FollowService.java` / [04_data_model.md](04_data_model.md) 3.6 / [05_api_design.md](05_api_design.md) 3.1①, #21, #22
+
+---
+
+## D-38 `isLikedByMe` と `isFollowing` の一括取得ヘルパーは共通化しない（D-35の3箇所目の判断）
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-26 |
+| **論点** | [04_data_model.md](04_data_model.md) 6.6 と D-35 は「`isLikedByMe` / `isFollowing` の一括取得は3箇所目（SC-08/09のフォロー一覧）が出た時点で共通化を検討する」としていた。実際に3箇所目（`FollowService.getFollowing` / `getFollowers`）を実装した結果、切り出すかどうか |
+| **選択肢** | A. `Set<Long> fetchRelatedIds(...)` のような共通ヘルパーに切り出す / **B. 検討した結果、切り出さない。3箇所とも個別実装のままにする** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+`likedPostIdsOf`（`likes.post_id` を引く）と `isFollowing` の一括取得（`follows.followee_id` を引く）は、対象テーブル・引くカラム・呼び出し元の型（`PostRow` vs `FollowRow`）がすべて異なる。共通化できる部分は「空リストならクエリを投げず `Set.of()` を返す」という3行のガードのみであり、そのために引数をジェネリックな関数に押し込めると、かえって呼び出し側の可読性が下がる。**D-35は「3箇所目で共通化を検討する」であって「必ず切り出す」ではない**ため、検討した結果「切り出さない」という判断自体をここに記録する。
+
+**影響範囲**: `post/PostService.java`（`likedPostIdsOf`）/ `follow/FollowService.java`（`toPage` 内の一括取得）
+
+---
+
+## D-39 フォロー中一覧・フォロワー一覧（F-FL-03 / F-FL-04）をPhase2からMVPへ前倒しする
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-26 |
+| **論点** | [02_feature_list.md](02_feature_list.md) でPhase2指定のSC-08 / SC-09（フォロー中一覧・フォロワー一覧）を、プロフィール・フォロー機能の実装と合わせて今回実装するか |
+| **選択肢** | A. Phase2のまま見送り、フォロー数の表示のみ行う / **B. 今回のスコープに含めて前倒しする** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+D-30（投稿編集の前倒し）と同じ考え方。プロフィール画面の「12 フォロー中 · 34 フォロワー」がクリックしても遷移しないと、導線が視覚的に用意されているのに機能していない不完全な状態になる。API（#23, #24）・データモデル（`follows` の両方向インデックス）は既に用意されており、実装コストの増分は小さい。
+
+**影響範囲**: [02_feature_list.md](02_feature_list.md)（F-FL-03, F-FL-04 の優先度表記はPhase2のまま残し、本エントリで前倒しを記録する。D-30と同じ運用）/ `follow/FollowService.java`, `pages/follow/FollowListPage.tsx`
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

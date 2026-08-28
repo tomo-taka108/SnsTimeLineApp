@@ -30,6 +30,18 @@ public interface PostMapper {
   long countNewer(
       @Param("tab") TimelineTab tab, @Param("meId") Long meId, @Param("sinceId") Long sinceId);
 
+  /**
+   * #18 ユーザーの投稿一覧（F-US-02, F-TL-03）。{@code findTimeline} とほぼ同形だが、tab による フォロー中の絞り込みが無く、代わりに user_id
+   * で絞り込む。
+   *
+   * <p>{@code limit} には「取得したい件数 + 1」を渡すこと（findTimeline と同じ規約）。
+   */
+  List<PostRow> findByUserId(
+      @Param("userId") Long userId,
+      @Param("cursorCreatedAt") OffsetDateTime cursorCreatedAt,
+      @Param("cursorId") Long cursorId,
+      @Param("limit") int limit);
+
   /** author情報をJOIN済みの1行を返す（作成直後のレスポンス組み立て用）。 */
   Optional<PostRow> findRowById(@Param("id") Long id);
 

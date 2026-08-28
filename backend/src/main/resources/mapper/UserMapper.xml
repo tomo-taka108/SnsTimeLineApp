@@ -54,4 +54,32 @@
     RETURNING id
   </select>
 
+  <!--
+    #18 プロフィールの投稿数（docs/09_decision_log.md D-36）。
+    idx_posts_user_created (user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL
+    を効かせるため、posts 側にも deleted_at IS NULL を明示する。
+  -->
+  <select id="countPosts" resultType="int">
+    SELECT COUNT(*) FROM posts WHERE user_id = #{userId} AND deleted_at IS NULL
+  </select>
+
+  <!--
+    #19 プロフィール編集。送られたフィールドのみ更新する。
+    displayName は null なら SET 句自体を出さない（COALESCE ではなく <if> で分岐する。
+    COALESCE(#{displayName}, display_name) だと「null を明示的に送って消す」場合と
+    区別できず、bio の「null で削除」要件（docs/05_api_design.md #19）と矛盾するため）。
+    bio は bioProvided フラグで「未送信（変更しない）」と「null 送信（削除する）」を
+    区別する。
+  -->
+  <update id="updateProfile">
+    UPDATE users
+    <set>
+      <if test="displayName != null">display_name = #{displayName},</if>
+      <if test="bioProvided">bio = #{bio},</if>
+      updated_at = now()
+    </set>
+    WHERE id = #{userId}
+      AND <include refid="activeOnly"/>
+  </update>
+
 </mapper>

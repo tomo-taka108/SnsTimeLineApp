@@ -19,8 +19,10 @@ IDEからの起動とデバッグを優先するため、**アプリ本体はDoc
 **前提**: JDK 25 / Docker Desktop / Node 20+。
 
 > **`docker-compose.yml` / `backend/` / `frontend/` はすべて実装済み。** 上記の手順はそのまま動く。
-> 現時点で動くのは**認証まわりの画面のみ**（新規登録 / ログイン / ログアウト）。
-> `/` は投稿一覧ではなく**仮ページ**（ログイン中ユーザーの表示のみ）。
+> 現時点で動くのは、認証（新規登録／ログイン／ログアウト）、投稿の作成・表示・編集・削除、
+> タイムライン（全体／フォロー中、無限スクロール）、コメント（投稿・表示・削除）、いいね、
+> プロフィール表示・編集、フォロー・フォロー中一覧・フォロワー一覧。
+> 画像添付・プロフィール画像・ユーザー検索は未実装（[docs/07_architecture.md](../../../docs/07_architecture.md) 7.1）。
 
 ## 起動・停止
 
@@ -96,6 +98,31 @@ REFRESH=$(echo "$RES2" | jq -r .refreshToken)
 curl -i -X POST "$BASE/auth/logout" -H "Authorization: Bearer $ACCESS"
 ```
 
+プロフィール・フォローの動作確認（2人目のユーザーを作ってフォローする例）:
+
+```bash
+# 2人目を作る
+curl -s -X POST "$BASE/auth/signup" -H 'Content-Type: application/json' \
+  -d '{"email":"hanako@example.com","username":"hanako","displayName":"はなこ","password":"Password1"}'
+RES3=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"hanako@example.com","password":"Password1"}')
+ACCESS2=$(echo "$RES3" | jq -r .accessToken)
+ME2=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $ACCESS2" | jq -r .id)
+
+# 1人目（$ACCESS）が2人目（$ME2）をフォロー。2回叩いても followerCount が2にならないことを確認する（冪等性）
+curl -s -X PUT "$BASE/users/$ME2/follow" -H "Authorization: Bearer $ACCESS" | jq
+curl -s -X PUT "$BASE/users/$ME2/follow" -H "Authorization: Bearer $ACCESS" | jq
+
+# プロフィール取得（isFollowing / postCount / followingCount / followerCount を確認）
+curl -s "$BASE/users/$ME2" -H "Authorization: Bearer $ACCESS" | jq
+
+# フォロワー一覧
+curl -s "$BASE/users/$ME2/followers" -H "Authorization: Bearer $ACCESS" | jq
+
+# 自分自身のフォロー→400 SELF_FOLLOW_NOT_ALLOWED になることを確認
+curl -i -X PUT "$BASE/users/$ME2/follow" -H "Authorization: Bearer $ACCESS2"
+```
+
 ブラウザで確認する場合は http://localhost:5173 を開く。
 
 ## DBリセット（開発データを初期状態に戻す）
@@ -105,7 +132,8 @@ docker compose down -v && docker compose up -d
 # バックエンドを再起動するとマイグレーションが最初から流れる
 ```
 
-> **現時点で存在するマイグレーションは `V1__create_users.sql` と `V2__create_refresh_tokens.sql` の2本。**
+> **現時点のマイグレーションは `V1__create_users.sql` / `V2__create_refresh_tokens.sql` /
+> `V3__create_posts_and_likes.sql` / `V4__create_follows.sql` / `V5__create_comments.sql` の5本。**
 > シードデータ（`V9__insert_seed_data.sql`）は未作成のため、リセット後のDBは空になる。
 > 動作確認用のユーザーは上記「バックエンド単体の動作確認」の signup で作る。
 

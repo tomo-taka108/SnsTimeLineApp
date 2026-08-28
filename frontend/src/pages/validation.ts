@@ -74,3 +74,17 @@ export function validateCommentBody(value: string): string | undefined {
   if (countChars(value) > 280) return "コメントは280文字以内で入力してください";
   return undefined;
 }
+
+/** プロフィール編集の表示名（SC-06）。ログイン画面と違い必須だが上限のみ350文字とは異なる */
+export function validateProfileDisplayName(value: string): string | undefined {
+  if (!trim(value)) return "表示名を入力してください";
+  const length = countChars(value);
+  if (length > 50) return "表示名は1〜50文字で入力してください";
+  return undefined;
+}
+
+/** 自己紹介（SC-06）。任意項目なので空文字は許容する */
+export function validateBio(value: string): string | undefined {
+  if (countChars(value) > 160) return "自己紹介は160文字以内で入力してください";
+  return undefined;
+}

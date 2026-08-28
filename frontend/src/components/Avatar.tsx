@@ -11,11 +11,14 @@ type Props = {
  * avatarUrl はファイルモジュールが未実装のため現状は常に null だが、
  * 実装されたときに差し替えなくて済むよう、画像の分岐は先に書いておく。
  */
+const SIZE_PX: Record<NonNullable<Props["size"]>, number> = { sm: 34, md: 44, lg: 88 };
+
 export function Avatar({ user, size = "md" }: Props) {
   const className = size === "md" ? "avatar" : `avatar avatar-${size}`;
 
   if (user.avatarUrl) {
-    return <img className={className} src={user.avatarUrl} alt="" width={44} height={44} />;
+    const px = SIZE_PX[size];
+    return <img className={className} src={user.avatarUrl} alt="" width={px} height={px} />;
   }
 
   // 表示名の1文字目。絵文字が壊れないようコードポイント単位で取り出す

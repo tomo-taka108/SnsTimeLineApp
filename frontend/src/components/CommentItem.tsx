@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import type { Comment } from "../api/types";
 import { formatRelative } from "../utils/datetime";
 import { Avatar } from "./Avatar";
@@ -40,10 +41,14 @@ export function CommentItem({ comment, onDelete }: Props) {
 
   return (
     <div className="comment-item">
-      <Avatar user={comment.author} size="sm" />
+      <Link to={`/users/${comment.author.id}`}>
+        <Avatar user={comment.author} size="sm" />
+      </Link>
       <div className="comment-main">
         <div className="post-head">
-          <span className="name">{comment.author.displayName}</span>
+          <Link className="name" to={`/users/${comment.author.id}`}>
+            {comment.author.displayName}
+          </Link>
           <span className="handle">@{comment.author.username}</span>
           <span className="handle">・</span>
           <span className="time">{formatRelative(comment.createdAt)}</span>

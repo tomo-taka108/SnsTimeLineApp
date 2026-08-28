@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/ApiError";
 import { createComment, deleteComment } from "../api/comments";
 import { deletePost, fetchPost, updatePost } from "../api/posts";
@@ -199,9 +199,13 @@ export function PostDetailPage() {
           <article className="post-card is-detail">
             <div className="detail-post">
               <div className="detail-head">
-                <Avatar user={post.author} size="lg" />
+                <Link to={`/users/${post.author.id}`}>
+                  <Avatar user={post.author} size="lg" />
+                </Link>
                 <div>
-                  <div className="name">{post.author.displayName}</div>
+                  <Link className="name" to={`/users/${post.author.id}`}>
+                    {post.author.displayName}
+                  </Link>
                   <div className="handle">@{post.author.username}</div>
                 </div>
                 {isMine && (

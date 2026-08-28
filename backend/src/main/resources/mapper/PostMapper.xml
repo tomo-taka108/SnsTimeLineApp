@@ -56,6 +56,24 @@
   </select>
 
   <!--
+    #18 ユーザーの投稿一覧（docs/05_api_design.md #18）。findTimeline とほぼ同形で、
+    tab によるフォロー中の絞り込みが無い代わりに user_id で絞り込む。
+    idx_posts_user_created (user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL を使う。
+  -->
+  <select id="findByUserId" resultType="com.example.snstimeline.post.PostRow">
+    SELECT <include refid="rowColumns"/>
+    FROM posts p
+    JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
+    WHERE <include refid="activeOnly"/>
+      AND p.user_id = #{userId}
+    <if test="cursorCreatedAt != null">
+      AND (p.created_at, p.id) &lt; (#{cursorCreatedAt}, #{cursorId})
+    </if>
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT #{limit}
+  </select>
+
+  <!--
     #29 新着件数。sinceId（クライアントが持つ先頭投稿のid）より新しい投稿を数える。
     id は BIGSERIAL の単調増加なので、created_at を使わずに新着判定できる
     （docs/09_decision_log.md D-31）。

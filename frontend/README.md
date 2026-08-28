@@ -31,10 +31,12 @@ npm run build                           # 本番ビルド
 | `src/api/` | APIクライアント。`client.ts` に**JWTの自動付与と401時のトークン再発行**を集約している |
 | `src/auth/` | 認証状態（Context）とルートガード |
 | `src/components/` | ヘッダー・トースト・フォーム部品・投稿カード・コメント表示/入力・モーダル |
-| `src/hooks/` | 複数画面で共有するフック（`useLike` など） |
+| `src/hooks/` | 複数画面で共有するフック（`useLike`, `useFollow` など） |
 | `src/pages/` | 画面。ファイル名は画面ID（SC-01 など）と対応 |
 | `src/pages/timeline/` | SC-03 タイムラインと専用フック（無限スクロール・新着ポーリング） |
 | `src/pages/postDetail/` | SC-04 投稿詳細のコメント一覧フック（`useComments`） |
+| `src/pages/profile/` | SC-05 プロフィール・SC-06 プロフィール編集 |
+| `src/pages/follow/` | SC-08 フォロー中一覧・SC-09 フォロワー一覧（同一コンポーネントを `mode` で出し分け） |
 | `src/styles/` | `mockup/common.css` から移植したスタイル |
 | `src/utils/` | 日時フォーマットなどの汎用ヘルパー |
 
@@ -46,9 +48,14 @@ npm run build                           # 本番ビルド
 | SC-02 | `/signup` | 新規登録（成功するとそのままログイン状態になる） |
 | SC-03 | `/` | タイムライン。無限スクロール・タブ・新着通知バナー・投稿作成（FAB→MD-01）・いいね |
 | SC-04 | `/posts/:postId` | 投稿詳細。編集(MD-02)・削除(MD-03)・いいね・コメント（投稿・表示・削除。編集はPhase2） |
+| SC-05 | `/users/:userId` | プロフィール。自分／他人で表示分岐、フォローボタン、投稿一覧（無限スクロール） |
+| SC-06 | `/settings/profile` | プロフィール編集。表示名・自己紹介（プロフィール画像はPhase2のプレースホルダ） |
+| SC-08 | `/users/:userId/following` | フォロー中一覧 |
+| SC-09 | `/users/:userId/followers` | フォロワー一覧 |
 | SC-12 | `*` | NotFound |
 
-> **画像添付は未実装。** コメント編集（Phase2）も未実装で、削除のみ。
+> **画像添付・プロフィール画像は未実装。** コメント編集（Phase2）、ユーザー検索（SC-07, Phase2）、
+> いいねしたユーザー一覧（SC-10, Phase2）も未実装。
 
 ## 触るときに知っておくこと
 

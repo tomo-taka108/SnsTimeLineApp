@@ -23,3 +23,9 @@ export function formatAbsolute(iso: string): string {
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`;
 }
+
+/** プロフィール用の登録月表示「2026年8月からご利用」（docs/03_screen_design.md SC-05、mockup/mock.js formatJoined） */
+export function formatJoined(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月からご利用`;
+}
