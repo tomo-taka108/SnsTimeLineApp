@@ -26,7 +26,21 @@
 		     NoSuchMethodError で落ちる。JDK 25 に対応した版を明示的に指定する -->
 		<spotless.version>3.10.0</spotless.version>
 		<google-java-format.version>1.36.1</google-java-format.version>
+		<aws-sdk.version>2.54.7</aws-sdk.version>
 	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<!-- AWS SDK 内のモジュール間でバージョンを揃えるための BOM -->
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${aws-sdk.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
 	<dependencies>
 		<!-- ===== Web / セキュリティ / バリデーション ===== -->
@@ -86,6 +100,15 @@
 			<artifactId>jjwt-gson</artifactId>
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
+		</dependency>
+
+		<!-- ===== AWS S3 =====
+		     app.storage.type=S3 のときだけ使う。LOCAL で動かす場合はこの依存があっても
+		     S3クライアントのBeanが作られないため、AWSアカウントは不要
+		     （docs/10_infrastructure.md 5章） -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
 		</dependency>
 	</dependencies>
 

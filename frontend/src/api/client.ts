@@ -44,6 +44,13 @@ type RequestOptions = {
    * トークンの期限切れではない。リフレッシュの対象にしない。
    */
   public?: boolean;
+  /**
+   * 画像アップロード（#25）用。multipart/form-data で送る。
+   *
+   * Content-Type は<b>あえて設定しない</b>。boundary 付きのヘッダーは
+   * ブラウザが FormData から自動生成するため、手で指定すると壊れる。
+   */
+  formData?: FormData;
 };
 
 /** レスポンスをエラーとして解釈する。ボディが壊れていても落ちないようにする */
@@ -119,7 +126,7 @@ async function send(path: string, options: RequestOptions, accessToken: string |
     return await fetch(`${BASE_URL}${path}`, {
       method: options.method ?? "GET",
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.formData ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
     });
   } catch {
     // ネットワーク到達不能（サーバー停止・オフライン）

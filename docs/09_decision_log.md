@@ -853,6 +853,70 @@ D-30（投稿編集の前倒し）と同じ考え方。プロフィール画面�
 
 ---
 
+## D-40 開発環境の画像保存先にS3を使う（LOCALは既定として残す）
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-29 |
+| **論点** | 画像機能の実装にあたり、ローカル開発の保存先を `LOCAL`（`./uploads`）にするか、実際に S3 を使うか |
+| **選択肢** | A. MVPは `LOCAL` のみ実装し、S3実装は後回し / **B. `LocalFileStorageService` と `S3FileStorageService` の両方を実装し、`.env` で切り替える** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+[10_infrastructure.md](10_infrastructure.md) 5章は「ローカル開発をS3依存にしない（AWSアカウントが無くても開発できる状態を保つ）」を方針としており、これは維持する。そのうえで S3 実装も同時に用意したのは、**抽象化が本当に機能するかは実装を2つ並べて初めて検証できる**ため。片方だけを作ると「差し替えられるはず」という想定のまま終わる。
+
+`app.storage.type` の既定値は `LOCAL` のままとし（`.env.example` も `LOCAL`）、S3を使う場合のみ各開発者が `.env` で切り替える。S3のコストはバケットの個数ではなく保存容量とリクエスト数で決まるため、学習用途の利用量では実質無視できる。
+
+**バケットは既存の別アプリ（famigo）と相乗りせず新規作成した。** コスト差はゼロだが、IAMポリシーをバケット単位で最小権限に絞れること、ライフサイクル設定を独立させられること、後片付けがバケット削除で済むことを優先した。
+
+**影響範囲**: `file/storage/`（`FileStorageService` と2実装）/ `application.yml`（`app.storage.*`）/ `.env.example` / `pom.xml`（AWS SDK for Java v2）
+
+---
+
+## D-41 `@MapperScan` の対象を `@Mapper` 付きの型に限定する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-29 |
+| **論点** | `@MapperScan("com.example.snstimeline")` がスキャン範囲内の**すべてのインターフェース**をMyBatisマッパーとして登録してしまう |
+| **選択肢** | A. マッパーを専用パッケージに集約し、そこだけスキャンする / **B. `annotationClass = Mapper.class` で対象を限定する** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+`FileStorageService`（DIで実装を差し替えるための普通のインターフェース）を追加したところ、**これがマッパーとして登録され、実装クラスと合わせてBeanが2つになり起動に失敗した**（`expected single matching bean but found 2`）。
+
+Aは既存のマッパーが機能ごとのパッケージに分散している現状と噛み合わない（`post/`, `user/`, `follow/` などに散在）。Bは既存マッパーが全て `@Mapper` を付けている前提をそのまま使え、**変更が1行で済むうえに、今後インターフェースを追加しても同じ事故が起きない**。
+
+これはD-25が指摘する「MyBatisは誤りを起動時に検出しにくい」の一種だが、今回は起動失敗という形で顕在化した。黙って `null` になるケースより発見しやすい。
+
+**影響範囲**: `SnsTimelineApplication.java`
+
+---
+
+## D-42 アップロードサイズ超過は `MaxUploadSizeExceededException` を捕捉して413にする
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-29 |
+| **論点** | 5MB超のアップロードが 500 になり、[06_non_functional.md](06_non_functional.md) 3.5 が要求する 413 を返せない |
+| **選択肢** | A. `spring.servlet.multipart.max-file-size` をアプリの上限（5MB）と一致させる / **B. multipart 上限を余裕のある値にし、5MB判定はサービス層で行う。Springの例外はハンドラで413に変換する** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+Springのmultipart制限は**Controllerに入る前**に発火するため、`FileService` のサイズ検証には到達しない。Aだけを行うと例外は出るが、それを誰も捕捉しなければ 500 のままで、エラーコード `FILE_TOO_LARGE` も返せない。
+
+Bにより、通常のサイズ超過は設計どおり 413 + `FILE_TOO_LARGE` を返し、`app.upload.max-size-mb` の1箇所で上限を管理できる。multipart側の20MBは「極端に巨大なリクエストをTomcatの段階で切る」最後の防波堤として残す。`GlobalExceptionHandler` にハンドラを追加したのは、それでも到達しうる経路（20MB超）を500にしないため。
+
+**影響範囲**: `common/GlobalExceptionHandler.java` / `application.yml`（`spring.servlet.multipart`）
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

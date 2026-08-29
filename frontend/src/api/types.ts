@@ -58,6 +58,10 @@ export const ErrorCode = {
   NOT_FOUND: "NOT_FOUND",
   EMAIL_ALREADY_EXISTS: "EMAIL_ALREADY_EXISTS",
   USERNAME_ALREADY_EXISTS: "USERNAME_ALREADY_EXISTS",
+  /** 画像アップロード（#25）。5MB超 */
+  FILE_TOO_LARGE: "FILE_TOO_LARGE",
+  /** 画像アップロード（#25）。JPEG/PNG/WebP 以外、または実体が画像でない */
+  UNSUPPORTED_MEDIA_TYPE: "UNSUPPORTED_MEDIA_TYPE",
   INTERNAL_ERROR: "INTERNAL_ERROR",
   /** 通信そのものに失敗した場合にフロント側で付ける（バックエンド由来ではない） */
   NETWORK_ERROR: "NETWORK_ERROR",
@@ -78,12 +82,20 @@ export type LoginPayload = {
   password: string;
 };
 
-/** 投稿に添付された画像。画像機能は未実装のため、実際に配列へ入ることは無い */
+/** 投稿に添付された画像。投稿への添付（F-PO-02）は次のPRで対応するため、現状は常に空配列 */
 export type PostImageSummary = {
   fileId: number;
   url: string;
   width: number;
   height: number;
+};
+
+/** #25 画像アップロードのレスポンス。width / height は取得できなければ null */
+export type UploadFileResponse = {
+  fileId: number;
+  url: string;
+  width: number | null;
+  height: number | null;
 };
 
 /** 投稿（タイムライン・詳細で共通、docs/05_api_design.md 4章 PostSummary）。 */
