@@ -76,6 +76,7 @@
     <set>
       <if test="displayName != null">display_name = #{displayName},</if>
       <if test="bioProvided">bio = #{bio},</if>
+      <if test="avatarProvided">avatar_file_id = #{avatarFileId},</if>
       updated_at = now()
     </set>
     WHERE id = #{userId}

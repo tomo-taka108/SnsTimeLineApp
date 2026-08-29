@@ -10,6 +10,7 @@ import { CommentForm } from "../components/CommentForm";
 import { CommentItem } from "../components/CommentItem";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { PostComposer } from "../components/PostComposer";
+import { PostImage } from "../components/PostImage";
 import { useAuth } from "../auth/useAuth";
 import { useLike } from "../hooks/useLike";
 import { useToast } from "../components/useToast";
@@ -222,6 +223,8 @@ export function PostDetailPage() {
 
               <p className="detail-text">{post.body}</p>
 
+              {post.images[0] && <PostImage image={post.images[0]} />}
+
               <div className="detail-time">
                 {formatAbsolute(post.createdAt)}
                 {post.editedAt && <span className="edited">・編集済み</span>}
@@ -306,6 +309,7 @@ export function PostDetailPage() {
           onSubmit={handleUpdate}
           onClose={() => setIsEditOpen(false)}
           hint="※ 画像の差し替えはできません（本文のみ編集可）"
+          existingImages={post.images}
         />
       )}
 

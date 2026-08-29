@@ -910,6 +910,100 @@ button {
   outline: none;
 }
 
+/*
+ * 投稿への添付画像プレビュー（MD-01）と、投稿カード・詳細の添付画像表示。
+ * mockup/common.css の .post-image / .image-preview は「実写真を使わずCSSで
+ * 代替する」プレースホルダ（固定 height / aspect-ratio）だったため、実画像を
+ * <img> で内包する形に調整している（docs/09_decision_log.md 画像機能2回目）。
+ */
+.image-preview {
+  position: relative;
+  margin-top: 10px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.image-preview img {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+}
+
+.image-preview .remove-image {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 20, 25, 0.75);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* 投稿カード・投稿詳細の添付画像。ボタンとして実装し、キーボードでも拡大表示を開ける */
+.post-image {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: none;
+  cursor: pointer;
+}
+
+.post-image img {
+  display: block;
+  width: 100%;
+  max-height: 400px;
+  object-fit: cover;
+}
+
+/* 画像の拡大表示（ライトボックス）。.modal は白背景・パディング前提で画像に合わないため専用に作る */
+.lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.9);
+  padding: 24px;
+}
+
+.lightbox-img {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 /* 確認モーダル（MD-03）、および投稿破棄の確認にも流用する */
 .confirm-body {
   padding: 26px 24px 8px;

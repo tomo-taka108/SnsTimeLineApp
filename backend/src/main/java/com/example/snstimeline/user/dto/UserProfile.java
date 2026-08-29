@@ -1,5 +1,6 @@
 package com.example.snstimeline.user.dto;
 
+import com.example.snstimeline.file.dto.UploadFileResponse;
 import com.example.snstimeline.user.User;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.OffsetDateTime;
@@ -42,14 +43,13 @@ public record UserProfile(
       int followerCount,
       boolean isFollowing,
       boolean isMe) {
-    // avatarUrl は本来 FileStorageService が組み立てる。
-    // ファイルモジュールは未実装のため、現時点では常に null を返す（UserSummary と同じ理由）。
-    // TODO(#5): ファイルモジュール実装時に avatarFileId -> URL 変換を差し込む
+    String avatarUrl =
+        user.avatarFileId() == null ? null : UploadFileResponse.urlOf(user.avatarFileId());
     return new UserProfile(
         user.id(),
         user.username(),
         user.displayName(),
-        null,
+        avatarUrl,
         user.bio(),
         postCount,
         followingCount,

@@ -5,12 +5,7 @@ type Props = {
   size?: "sm" | "md" | "lg";
 };
 
-/**
- * アバター。画像が未設定ならイニシャルを表示する（docs/03_screen_design.md 5章）。
- *
- * avatarUrl はファイルモジュールが未実装のため現状は常に null だが、
- * 実装されたときに差し替えなくて済むよう、画像の分岐は先に書いておく。
- */
+/** アバター。画像が未設定ならイニシャルを表示する（docs/03_screen_design.md 5章）。 */
 const SIZE_PX: Record<NonNullable<Props["size"]>, number> = { sm: 34, md: 44, lg: 88 };
 
 export function Avatar({ user, size = "md" }: Props) {

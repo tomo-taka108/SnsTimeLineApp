@@ -5,6 +5,7 @@ import { useAuth } from "../auth/useAuth";
 import { useLike } from "../hooks/useLike";
 import { formatRelative } from "../utils/datetime";
 import { Avatar } from "./Avatar";
+import { PostImage } from "./PostImage";
 
 type Props = {
   post: PostSummary;
@@ -113,6 +114,7 @@ export function PostCard({ post, onEdit, onDelete, onLikeChange }: Props) {
           )}
         </div>
         <p className="post-text is-clamped">{post.body}</p>
+        {post.images[0] && <PostImage image={post.images[0]} />}
         <div className="post-actions">
           <span className="action-btn action-comment">
             <span className="ico" aria-hidden="true">

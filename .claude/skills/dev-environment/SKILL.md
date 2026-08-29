@@ -200,8 +200,8 @@ docker compose down -v && docker compose up -d
 
 > **現時点のマイグレーションは `V1__create_users.sql` / `V2__create_refresh_tokens.sql` /
 > `V3__create_posts_and_likes.sql` / `V4__create_follows.sql` / `V5__create_comments.sql` /
-> `V6__create_stored_files.sql` の6本。**
-> （`stored_files` は設計書では `V3` 想定だったが、V3〜V5 が先に埋まったため `V6` で作成した）
+> `V6__create_stored_files.sql` / `V7__create_post_images.sql` の7本。**
+> （`stored_files` / `post_images` は設計書では `V3` 想定だったが、V3〜V5 が先に埋まったため `V6` / `V7` で作成した）
 > シードデータ（`V9__insert_seed_data.sql`）は未作成のため、リセット後のDBは空になる。
 > 動作確認用のユーザーは上記「バックエンド単体の動作確認」の signup で作る。
 

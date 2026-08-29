@@ -19,7 +19,9 @@ import tools.jackson.databind.JsonNode;
  *
  * <p>{@code email} と {@code username} は変更できない仕様のため、このDTOでは読み取らない。送られても無視される。
  *
- * <p>{@code avatarFileId} は画像機能未実装のため今回は受け付けない（次回、画像機能一式と合わせて追加する）。
+ * <p>{@code avatarFileId} は {@code bio} と同じ「未送信＝変更しない／{@code null}＝削除」の3点セットで扱う
+ * （docs/05_api_design.md #19「{@code avatarFileId}: null で削除」）。自分がアップロードしたファイルかどうかの 所有者チェックは {@code
+ * UserService} が {@code FileService.assertOwnedBy} 経由で行う（D-44）。
  */
 public record UpdateProfileRequest(JsonNode body) {
 
@@ -67,5 +69,28 @@ public record UpdateProfileRequest(JsonNode body) {
     return hasBio()
         && !isBioNull()
         && bio().codePointCount(0, bio().length()) > ValidationConstants.BIO_MAX;
+  }
+
+  /** avatarFileId フィールドがリクエストに含まれているか（値が null でも true。「削除」の指示として扱うため）。 */
+  public boolean hasAvatarFileId() {
+    return body.has("avatarFileId");
+  }
+
+  /** avatarFileId が明示的に null で送られたか（＝プロフィール画像を削除する指示）。 */
+  public boolean isAvatarFileIdNull() {
+    return hasAvatarFileId() && body.get("avatarFileId").isNull();
+  }
+
+  /** avatarFileId が数値以外で送られていないか。{@link #hasAvatarFileId()} が true かつ削除でないときだけ意味を持つ。 */
+  public boolean isAvatarFileIdInvalid() {
+    return hasAvatarFileId() && !isAvatarFileIdNull() && !body.get("avatarFileId").isNumber();
+  }
+
+  /**
+   * avatarFileId。{@link #hasAvatarFileId()} が true かつ {@link #isAvatarFileIdNull()} が false
+   * のときだけ呼ぶこと。
+   */
+  public Long avatarFileId() {
+    return body.get("avatarFileId").asLong();
   }
 }

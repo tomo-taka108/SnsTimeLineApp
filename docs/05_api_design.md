@@ -813,10 +813,12 @@ UNIQUE制約違反（`DataIntegrityViolationException`）を捕捉して実現�
 |---|---|
 | `displayName` | 1〜50文字 |
 | `bio` | 160文字以内。`null` を明示的に送れば削除 |
-| `avatarFileId` | 自分がアップロードしたファイルのみ。`null` で削除（Phase2） |
+| `avatarFileId` | 自分がアップロードしたファイルのみ。`null` で削除 |
 
 **レスポンス `200 OK`**: `UserProfile`
-**エラー**: `400 VALIDATION_ERROR` / `403 FORBIDDEN`（他人のファイルID）
+**エラー**: `400 VALIDATION_ERROR` / `404 NOT_FOUND`（存在しない `avatarFileId`）/ `403 FORBIDDEN`（他人のファイルID）
+
+> **404 は #6 と揃えている**（[09_decision_log.md](09_decision_log.md) D-43）。認可は「①存在チェック→404、②所有者チェック→403」の順序に統一しているため（D-14）。
 
 > **`email` と `username` は変更できない**（SC-06の仕様）。送られても無視する。
 
