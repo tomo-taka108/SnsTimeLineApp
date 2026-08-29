@@ -82,12 +82,12 @@ export type LoginPayload = {
   password: string;
 };
 
-/** 投稿に添付された画像。投稿への添付（F-PO-02）は次のPRで対応するため、現状は常に空配列 */
+/** 投稿に添付された画像。width / height はサーバーが取得できなかった場合に null（WebP など） */
 export type PostImageSummary = {
   fileId: number;
   url: string;
-  width: number;
-  height: number;
+  width: number | null;
+  height: number | null;
 };
 
 /** #25 画像アップロードのレスポンス。width / height は取得できなければ null */
@@ -127,9 +127,10 @@ export type NewCountResponse = {
 
 export type TimelineTab = "all" | "following";
 
-/** #6 投稿作成のリクエスト。imageFileIds は画像機能未実装のため含めない */
+/** #6 投稿作成のリクエスト。imageFileIds は任意。MVPは最大1件（docs/05_api_design.md #6） */
 export type CreatePostPayload = {
   body: string;
+  imageFileIds?: number[];
 };
 
 /** #8 投稿編集のリクエスト */
@@ -184,6 +185,8 @@ export type UserProfile = {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  /** プロフィール背景（カバー画像）。未設定なら null */
+  coverUrl: string | null;
   bio: string | null;
   postCount: number;
   followingCount: number;
@@ -212,14 +215,16 @@ export type UserListItem = {
 /**
  * #19 プロフィール編集のリクエスト。
  *
- * bio は「送らない（変更しない）」と「null を明示的に送る（削除する）」を区別する必要があるため、
- * キー自体を省略できるようオプショナルにする。呼び出し側は「変更しないなら bio キーを含めない
- * オブジェクトを渡す」「削除するなら bio: null を渡す」を使い分ける
+ * bio / avatarFileId は「送らない（変更しない）」と「null を明示的に送る（削除する）」を
+ * 区別する必要があるため、キー自体を省略できるようオプショナルにする。呼び出し側は
+ * 「変更しないならキーを含めないオブジェクトを渡す」「削除するなら null を渡す」を使い分ける
  * （docs/05_api_design.md #19、バックエンドの UpdateProfileRequest と同じ区別）。
  */
 export type UpdateProfilePayload = {
   displayName?: string;
   bio?: string | null;
+  avatarFileId?: number | null;
+  coverFileId?: number | null;
 };
 
 /** #21 / #22 フォロー・フォロー解除のレスポンス */

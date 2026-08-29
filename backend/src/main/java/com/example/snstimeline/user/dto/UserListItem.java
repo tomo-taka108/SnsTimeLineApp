@@ -1,5 +1,6 @@
 package com.example.snstimeline.user.dto;
 
+import com.example.snstimeline.file.dto.UploadFileResponse;
 import com.example.snstimeline.follow.FollowRow;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -28,8 +29,9 @@ public record UserListItem(
    * @param isFollowing 呼び出し側が一括取得した「自分がフォロー済みか」の判定結果を渡す （docs/04_data_model.md 6.6、N+1回避）
    */
   public static UserListItem fromFollowRow(FollowRow row, boolean isFollowing, boolean isMe) {
-    // avatarUrl はファイルモジュール未実装のため常に null（UserSummary と同じ理由）
+    String avatarUrl =
+        row.avatarFileId() == null ? null : UploadFileResponse.urlOf(row.avatarFileId());
     return new UserListItem(
-        row.userId(), row.username(), row.displayName(), null, row.bio(), isFollowing, isMe);
+        row.userId(), row.username(), row.displayName(), avatarUrl, row.bio(), isFollowing, isMe);
   }
 }

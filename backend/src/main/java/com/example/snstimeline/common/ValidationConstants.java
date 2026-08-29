@@ -18,6 +18,9 @@ public final class ValidationConstants {
   public static final int POST_BODY_MAX = 280;
   public static final int COMMENT_BODY_MAX = 280;
 
+  /** 1投稿あたりの添付画像数。DBは4枚まで対応するが、MVPのAPIは1枚に制限する（docs/04_data_model.md 2.6）。 */
+  public static final int POST_IMAGE_COUNT_MAX = 1;
+
   /** ユーザー名は半角英数字とアンダースコアのみ。DBの ck_users_username_format と同じ。 */
   public static final String USERNAME_PATTERN = "^[a-zA-Z0-9_]+$";
 

@@ -3,6 +3,7 @@ package com.example.snstimeline.user;
 import com.example.snstimeline.common.ApiException;
 import com.example.snstimeline.common.ErrorCode;
 import com.example.snstimeline.common.NotFoundException;
+import com.example.snstimeline.file.FileService;
 import com.example.snstimeline.follow.FollowMapper;
 import com.example.snstimeline.user.dto.UpdateProfileRequest;
 import com.example.snstimeline.user.dto.UserProfile;
@@ -21,10 +22,12 @@ public class UserService {
 
   private final UserMapper userMapper;
   private final FollowMapper followMapper;
+  private final FileService fileService;
 
-  public UserService(UserMapper userMapper, FollowMapper followMapper) {
+  public UserService(UserMapper userMapper, FollowMapper followMapper, FileService fileService) {
     this.userMapper = userMapper;
     this.followMapper = followMapper;
+    this.fileService = fileService;
   }
 
   /**
@@ -65,12 +68,41 @@ public class UserService {
     if (request.isBioTooLong()) {
       throw new ApiException(ErrorCode.VALIDATION_ERROR);
     }
+    if (request.isAvatarFileIdInvalid()) {
+      throw new ApiException(ErrorCode.VALIDATION_ERROR);
+    }
+    if (request.isCoverFileIdInvalid()) {
+      throw new ApiException(ErrorCode.VALIDATION_ERROR);
+    }
 
     String displayName = request.hasDisplayName() ? request.displayName() : null;
     boolean bioProvided = request.hasBio();
     String bio = bioProvided && !request.isBioNull() ? request.bio() : null;
 
-    int affected = userMapper.updateProfile(meId, displayName, bioProvided, bio);
+    boolean avatarProvided = request.hasAvatarFileId();
+    Long avatarFileId =
+        avatarProvided && !request.isAvatarFileIdNull() ? request.avatarFileId() : null;
+    boolean coverProvided = request.hasCoverFileId();
+    Long coverFileId = coverProvided && !request.isCoverFileIdNull() ? request.coverFileId() : null;
+    // null（削除）は自分のファイルかどうかを問わないため検証しない。
+    // 存在チェック→404、所有者チェック→403 の順は FileService.assertOwnedBy に集約する（D-14, D-44）
+    if (avatarFileId != null) {
+      fileService.assertOwnedBy(meId, avatarFileId);
+    }
+    if (coverFileId != null) {
+      fileService.assertOwnedBy(meId, coverFileId);
+    }
+
+    int affected =
+        userMapper.updateProfile(
+            meId,
+            displayName,
+            bioProvided,
+            bio,
+            avatarProvided,
+            avatarFileId,
+            coverProvided,
+            coverFileId);
     if (affected == 0) {
       // 自分自身の操作なので通常起こらないが、論理削除との競合を考慮して念のため判定する
       throw new NotFoundException();

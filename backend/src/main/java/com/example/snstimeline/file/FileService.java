@@ -2,6 +2,7 @@ package com.example.snstimeline.file;
 
 import com.example.snstimeline.common.ApiException;
 import com.example.snstimeline.common.ErrorCode;
+import com.example.snstimeline.common.ForbiddenException;
 import com.example.snstimeline.common.NotFoundException;
 import com.example.snstimeline.file.dto.UploadFileResponse;
 import com.example.snstimeline.file.storage.FileStorageService;
@@ -83,6 +84,23 @@ public class FileService {
   public FileContent download(Long fileId) {
     StoredFile file = fileMapper.findById(fileId).orElseThrow(NotFoundException::new);
     return new FileContent(storageService.load(file.storageKey()), file.contentType());
+  }
+
+  /**
+   * 投稿への添付（#6）・プロフィール画像の設定（#19）で使う所有者チェック。
+   *
+   * <p>{@code stored_files} の知識をファイルモジュールの外に出さないため、 {@code PostService} / {@code UserService} は
+   * {@link FileMapper} を直接使わず、必ずこのメソッドを経由する （docs/09_decision_log.md D-44）。
+   *
+   * <p>認可は「① 存在チェック→404 → ② 所有者チェック→403」の順を守る（D-14）。 存在しない {@code fileId} は #6 の設計書どおり404、#19
+   * も同じ順序に揃える（D-43）。
+   */
+  @Transactional(readOnly = true)
+  public void assertOwnedBy(Long meId, Long fileId) {
+    StoredFile file = fileMapper.findById(fileId).orElseThrow(NotFoundException::new);
+    if (!file.uploadedBy().equals(meId)) {
+      throw new ForbiddenException();
+    }
   }
 
   /** 配信用のファイル実体とContent-Type。 */

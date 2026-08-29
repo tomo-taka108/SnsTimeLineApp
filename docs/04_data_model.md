@@ -118,6 +118,7 @@ erDiagram
 | `display_name` | `VARCHAR(50)` | NO | — | 画面に表示する名前。重複可 |
 | `bio` | `VARCHAR(160)` | YES | `NULL` | 自己紹介 |
 | `avatar_file_id` | `BIGINT` | YES | `NULL` | プロフィール画像。`stored_files.id` を参照 |
+| `cover_file_id` | `BIGINT` | YES | `NULL` | プロフィール背景（カバー画像）。`stored_files.id` を参照（D-47） |
 | `created_at` | `TIMESTAMPTZ` | NO | `now()` | 登録日時。「2026年8月からご利用」の表示に使う |
 | `updated_at` | `TIMESTAMPTZ` | NO | `now()` | 更新日時 |
 | `deleted_at` | `TIMESTAMPTZ` | YES | `NULL` | 論理削除（退会）。MVPでは退会機能なしだが、カラムは用意する |
@@ -130,6 +131,7 @@ erDiagram
 | UNIQUE | `email` |
 | UNIQUE | `username` |
 | FK | `avatar_file_id` → `stored_files(id)` `ON DELETE SET NULL` |
+| FK | `cover_file_id` → `stored_files(id)` `ON DELETE SET NULL` |
 | CHECK | `char_length(username) >= 3` |
 | CHECK | `username ~ '^[a-zA-Z0-9_]+$'` — 半角英数字とアンダースコアのみ |
 | CHECK | `char_length(display_name) >= 1` |

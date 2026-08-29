@@ -13,7 +13,7 @@
 
   <sql id="userColumns">
     id, email, password_hash, username, display_name, bio,
-    avatar_file_id, created_at, updated_at, deleted_at
+    avatar_file_id, cover_file_id, created_at, updated_at, deleted_at
   </sql>
 
   <select id="findByEmail" resultType="com.example.snstimeline.user.User">
@@ -76,6 +76,8 @@
     <set>
       <if test="displayName != null">display_name = #{displayName},</if>
       <if test="bioProvided">bio = #{bio},</if>
+      <if test="avatarProvided">avatar_file_id = #{avatarFileId},</if>
+      <if test="coverProvided">cover_file_id = #{coverFileId},</if>
       updated_at = now()
     </set>
     WHERE id = #{userId}

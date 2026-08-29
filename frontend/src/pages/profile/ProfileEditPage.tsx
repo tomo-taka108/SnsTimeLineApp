@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES, resolveFileUrl, uploadFile } from "../../api/files";
 import { fetchProfile, updateProfile } from "../../api/users";
 import type { UserProfile } from "../../api/types";
 import { AppHeader } from "../../components/AppHeader";
+import { Avatar } from "../../components/Avatar";
 import { useAuth } from "../../auth/useAuth";
 import { useToast } from "../../components/useToast";
 import { countChars, validateBio, validateProfileDisplayName } from "../validation";
@@ -16,9 +18,6 @@ import { countChars, validateBio, validateProfileDisplayName } from "../validati
  *
  * メールアドレスは GET /auth/me が返さない（アカウント列挙防止）ため表示しない。
  * モックアップにはある disabled 表示だが、この画面では意図的にユーザー名のみを disabled 表示する。
- *
- * プロフィール画像欄はモックアップと同じく「（Phase2）」の非活性プレースホルダのみを置く
- * （画像アップロードAPIが未実装のため、F-US-04 は次回に見送り）。
  */
 export function ProfileEditPage() {
   const navigate = useNavigate();
@@ -29,8 +28,18 @@ export function ProfileEditPage() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
-  const [original, setOriginal] = useState({ displayName: "", bio: "" });
+  // undefined = 未変更（保存時にキー自体を送らない）。null = 削除。number = 新しい画像
+  const [avatarFileId, setAvatarFileId] = useState<number | null | undefined>(undefined);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  // カバー画像もアバターと同じ3値（未変更 / 削除 / 新しい画像）で扱う（D-48）
+  const [coverFileId, setCoverFileId] = useState<number | null | undefined>(undefined);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [original, setOriginal] = useState({ displayName: "", bio: "", avatarUrl: null as string | null });
   const [isSaving, setIsSaving] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -43,7 +52,11 @@ export function ProfileEditPage() {
         setProfile(result);
         setDisplayName(result.displayName);
         setBio(result.bio ?? "");
-        setOriginal({ displayName: result.displayName, bio: result.bio ?? "" });
+        setAvatarFileId(undefined);
+        setAvatarPreviewUrl(resolveFileUrl(result.avatarUrl));
+        setCoverFileId(undefined);
+        setCoverPreviewUrl(resolveFileUrl(result.coverUrl));
+        setOriginal({ displayName: result.displayName, bio: result.bio ?? "", avatarUrl: result.avatarUrl });
         setStatus("ready");
       } catch {
         if (!cancelled) {
@@ -59,9 +72,12 @@ export function ProfileEditPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  const avatarChanged = avatarFileId !== undefined;
+  const coverChanged = coverFileId !== undefined;
+
   // 未保存の変更がある状態での離脱に確認ダイアログを出す（docs/03_screen_design.md SC-06）
   useEffect(() => {
-    const changed = displayName !== original.displayName || bio !== original.bio;
+    const changed = displayName !== original.displayName || bio !== original.bio || avatarChanged || coverChanged;
     if (!changed) return;
 
     function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -71,30 +87,105 @@ export function ProfileEditPage() {
     }
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [displayName, bio, original]);
+  }, [displayName, bio, avatarChanged, coverChanged, original]);
 
   const displayNameError = validateProfileDisplayName(displayName);
   const bioError = validateBio(bio);
   const bioLength = countChars(bio);
   const bioCounterClass = bioLength > 160 ? "char-counter is-over" : bioLength > 140 ? "char-counter is-warn" : "char-counter";
 
-  const changed = displayName !== original.displayName || bio !== original.bio;
-  const canSave = changed && !displayNameError && !bioError && !isSaving;
+  const changed = displayName !== original.displayName || bio !== original.bio || avatarChanged || coverChanged;
+  const canSave = changed && !displayNameError && !bioError && !isSaving && !isUploadingAvatar && !isUploadingCover;
+
+  async function handleAvatarSelect(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    // クライアント側の検証。実際の検証はサーバー側が行う
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
+      showToast("対応していないファイル形式です（JPEG / PNG / WebP のみ）", true);
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      showToast("ファイルサイズが大きすぎます（5MBまで）", true);
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const uploaded = await uploadFile(file);
+      setAvatarFileId(uploaded.fileId);
+      setAvatarPreviewUrl(resolveFileUrl(uploaded.url));
+    } catch {
+      showToast("画像のアップロードに失敗しました", true);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
+
+  function handleAvatarRemove() {
+    setAvatarFileId(null);
+    setAvatarPreviewUrl(null);
+  }
+
+  async function handleCoverSelect(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    // クライアント側の検証。実際の検証はサーバー側が行う
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
+      showToast("対応していないファイル形式です（JPEG / PNG / WebP のみ）", true);
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      showToast("ファイルサイズが大きすぎます（5MBまで）", true);
+      return;
+    }
+
+    setIsUploadingCover(true);
+    try {
+      const uploaded = await uploadFile(file);
+      setCoverFileId(uploaded.fileId);
+      setCoverPreviewUrl(resolveFileUrl(uploaded.url));
+    } catch {
+      showToast("画像のアップロードに失敗しました", true);
+    } finally {
+      setIsUploadingCover(false);
+    }
+  }
+
+  function handleCoverRemove() {
+    setCoverFileId(null);
+    setCoverPreviewUrl(null);
+  }
 
   async function handleSave() {
     if (!canSave) return;
     setIsSaving(true);
     try {
-      const payload: { displayName?: string; bio?: string | null } = {};
+      const payload: {
+        displayName?: string;
+        bio?: string | null;
+        avatarFileId?: number | null;
+        coverFileId?: number | null;
+      } = {};
       if (displayName !== original.displayName) {
         payload.displayName = displayName;
       }
       if (bio !== original.bio) {
         payload.bio = bio === "" ? null : bio;
       }
+      if (avatarChanged) {
+        payload.avatarFileId = avatarFileId;
+      }
+      if (coverChanged) {
+        payload.coverFileId = coverFileId;
+      }
       const updated = await updateProfile(payload);
       if (user) {
-        updateUser({ ...user, displayName: updated.displayName });
+        updateUser({ ...user, displayName: updated.displayName, avatarUrl: resolveFileUrl(updated.avatarUrl) });
       }
       showToast("プロフィールを更新しました");
       navigate(`/users/${updated.id}`, { replace: true });
@@ -144,20 +235,80 @@ export function ProfileEditPage() {
         {status === "ready" && profile && (
           <div style={{ padding: "20px 16px" }}>
             <div className="form-field">
-              <label>
-                プロフィール画像
-                <span style={{ color: "var(--color-text-sub)", fontSize: "13px", fontWeight: 600 }}>
-                  （Phase2）
-                </span>
-              </label>
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                <span aria-hidden="true">
-                  <span className="avatar avatar-lg">{[...profile.displayName][0] ?? "?"}</span>
-                </span>
-                <div>
-                  <button className="btn btn-outline btn-sm" type="button" disabled>
-                    画像を変更
+              <label>カバー画像</label>
+              <div
+                className="profile-cover"
+                style={
+                  coverPreviewUrl
+                    ? { backgroundImage: `url(${coverPreviewUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+                    : undefined
+                }
+              />
+              <div style={{ marginTop: "8px" }}>
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept={ALLOWED_IMAGE_TYPES.join(",")}
+                  onChange={(event) => void handleCoverSelect(event)}
+                  hidden
+                />
+                <button
+                  className="btn btn-outline btn-sm"
+                  type="button"
+                  disabled={isUploadingCover || isSaving}
+                  onClick={() => coverInputRef.current?.click()}
+                >
+                  {isUploadingCover ? "アップロード中..." : "画像を変更"}
+                </button>
+                {coverPreviewUrl && (
+                  <button
+                    className="btn btn-outline btn-sm"
+                    type="button"
+                    disabled={isUploadingCover || isSaving}
+                    onClick={handleCoverRemove}
+                    style={{ marginLeft: "8px" }}
+                  >
+                    削除
                   </button>
+                )}
+                <div className="field-hint">JPEG / PNG / WebP、5MBまで</div>
+              </div>
+            </div>
+
+            <div className="form-field">
+              <label>プロフィール画像</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <Avatar
+                  user={{ id: profile.id, username: profile.username, displayName, avatarUrl: avatarPreviewUrl }}
+                  size="lg"
+                />
+                <div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept={ALLOWED_IMAGE_TYPES.join(",")}
+                    onChange={(event) => void handleAvatarSelect(event)}
+                    hidden
+                  />
+                  <button
+                    className="btn btn-outline btn-sm"
+                    type="button"
+                    disabled={isUploadingAvatar || isSaving}
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
+                    {isUploadingAvatar ? "アップロード中..." : "画像を変更"}
+                  </button>
+                  {avatarPreviewUrl && (
+                    <button
+                      className="btn btn-outline btn-sm"
+                      type="button"
+                      disabled={isUploadingAvatar || isSaving}
+                      onClick={handleAvatarRemove}
+                      style={{ marginLeft: "8px" }}
+                    >
+                      削除
+                    </button>
+                  )}
                   <div className="field-hint">JPEG / PNG / WebP、5MBまで。円形にトリミングされます</div>
                 </div>
               </div>

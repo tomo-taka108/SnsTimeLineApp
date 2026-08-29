@@ -20,8 +20,22 @@ export async function uploadFile(file: File): Promise<UploadFileResponse> {
   return request<UploadFileResponse>("/files", { method: "POST", formData });
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
+
 /** 配信URL（#26）。認証不要なので <img src> にそのまま渡せる */
 export function fileUrl(fileId: number): string {
-  const base = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
-  return `${base}/files/${fileId}`;
+  return `${API_BASE_URL}/files/${fileId}`;
+}
+
+/**
+ * サーバーが返す画像パス（例: `avatarUrl`, `PostImageSummary.url`）を絶対URLにする。
+ *
+ * バックエンドはオリジンを含まない `/api/v1/files/{id}` 形式のパスを返す
+ * （LOCAL/S3の切り替えに影響されないようにするため）。フロントとバックエンドは
+ * 別オリジン（:5173 / :8080）のため、そのまま `<img src>` に渡すとフロント自身への
+ * リクエストになり失敗する。null はそのまま null を返す。
+ */
+export function resolveFileUrl(path: string | null): string | null {
+  if (path === null) return null;
+  return `${new URL(API_BASE_URL).origin}${path}`;
 }

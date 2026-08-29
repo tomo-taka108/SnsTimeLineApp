@@ -51,10 +51,18 @@ public interface UserMapper {
    * @param displayName null なら変更しない
    * @param bioProvided true なら bio カラムを更新する（bio 自体が null でも「削除」として書き込む）
    * @param bio bioProvided が false のときは無視される
+   * @param avatarProvided true なら avatar_file_id カラムを更新する（avatarFileId が null でも「削除」として書き込む）
+   * @param avatarFileId avatarProvided が false のときは無視される
+   * @param coverProvided true なら cover_file_id カラムを更新する（coverFileId が null でも「削除」として書き込む）
+   * @param coverFileId coverProvided が false のときは無視される
    */
   int updateProfile(
       @Param("userId") Long userId,
       @Param("displayName") String displayName,
       @Param("bioProvided") boolean bioProvided,
-      @Param("bio") String bio);
+      @Param("bio") String bio,
+      @Param("avatarProvided") boolean avatarProvided,
+      @Param("avatarFileId") Long avatarFileId,
+      @Param("coverProvided") boolean coverProvided,
+      @Param("coverFileId") Long coverFileId);
 }

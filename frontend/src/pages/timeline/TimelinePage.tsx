@@ -51,9 +51,9 @@ export function TimelinePage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function handleCreate(body: string) {
+  async function handleCreate(body: string, imageFileIds?: number[]) {
     try {
-      const post = await createPost({ body });
+      const post = await createPost({ body, imageFileIds });
       timeline.prependPost(post);
       setIsComposeOpen(false);
       showToast("投稿しました");
@@ -203,6 +203,7 @@ export function TimelinePage() {
         submittingLabel="投稿中..."
         onSubmit={handleCreate}
         onClose={() => setIsComposeOpen(false)}
+        allowImage
       />
 
       <PostComposer
@@ -215,6 +216,7 @@ export function TimelinePage() {
         onSubmit={handleUpdate}
         onClose={() => setEditingPost(null)}
         hint="※ 画像の差し替えはできません（本文のみ編集可）"
+        existingImages={editingPost?.images}
       />
 
       <ConfirmModal

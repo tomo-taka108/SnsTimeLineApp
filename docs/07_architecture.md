@@ -402,7 +402,6 @@ SnsTimeLineApp/
 | 項目 | 状態 |
 |---|---|
 | コメント編集（F-CM-03, #12） | Phase2のため未実装。投稿・表示・削除（F-CM-01, 02, 04）は実装済み |
-| 画像投稿・プロフィール画像（F-IM-01〜03, F-US-04） | 未着手。`PostSummary.images` は常に空配列、`UserSummary.avatarUrl` / `UserProfile.avatarUrl` は常に `null` |
 | ユーザー検索（F-US-05, SC-07, #20） | Phase2のため未実装。フォロー相手はタイムラインの投稿者から辿る |
 | いいねしたユーザー一覧（F-LK-04, SC-10, #16） | Phase2のため未実装 |
 

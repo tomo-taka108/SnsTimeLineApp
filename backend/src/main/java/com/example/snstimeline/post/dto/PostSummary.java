@@ -9,8 +9,6 @@ import java.util.List;
 /**
  * 投稿（タイムライン・詳細で共通、docs/05_api_design.md 4章 PostSummary）。
  *
- * <p>{@code images} は画像機能未実装のため常に空配列（{@code null} にしない）。
- *
  * <p><b>{@code isLikedByMe} は {@code @JsonProperty} を明示する。</b> record + boolean
  * アクセサの組み合わせはJacksonのバージョンによって {@code likedByMe} と解釈されうるため、確実にAPI契約どおりの キー名で出す。
  *
@@ -31,10 +29,11 @@ public record PostSummary(
   /**
    * タイムラインSQLの1行から組み立てる。
    *
-   * @param isLikedByMe 呼び出し側が一括取得した「自分がいいね済みか」の判定結果を渡す （docs/04_data_model.md
-   *     5.3、N+1回避）。画像は今回未実装のため常に空配列になる
+   * @param isLikedByMe 呼び出し側が一括取得した「自分がいいね済みか」の判定結果を渡す （docs/04_data_model.md 5.3、N+1回避）
+   * @param images 同じく呼び出し側が一括取得した添付画像（docs/09_decision_log.md D-45）。 空なら {@code List.of()}
+   *     を渡すこと（{@code null} にしない）
    */
-  public static PostSummary from(PostRow row, boolean isLikedByMe) {
+  public static PostSummary from(PostRow row, boolean isLikedByMe, List<PostImageSummary> images) {
     UserSummary author =
         UserSummary.fromRow(
             row.authorId(),
@@ -45,7 +44,7 @@ public record PostSummary(
         row.id(),
         author,
         row.body(),
-        List.of(),
+        images,
         row.likeCount(),
         row.commentCount(),
         isLikedByMe,

@@ -6,12 +6,17 @@ import com.example.snstimeline.common.CursorPage;
 import com.example.snstimeline.common.ErrorCode;
 import com.example.snstimeline.common.ForbiddenException;
 import com.example.snstimeline.common.NotFoundException;
+import com.example.snstimeline.file.FileService;
 import com.example.snstimeline.post.dto.CreatePostRequest;
+import com.example.snstimeline.post.dto.PostImageSummary;
 import com.example.snstimeline.post.dto.PostSummary;
 import com.example.snstimeline.post.dto.UpdatePostRequest;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,16 +31,25 @@ public class PostService {
 
   private final PostMapper postMapper;
   private final LikeMapper likeMapper;
+  private final PostImageMapper postImageMapper;
+  private final FileService fileService;
 
-  public PostService(PostMapper postMapper, LikeMapper likeMapper) {
+  public PostService(
+      PostMapper postMapper,
+      LikeMapper likeMapper,
+      PostImageMapper postImageMapper,
+      FileService fileService) {
     this.postMapper = postMapper;
     this.likeMapper = likeMapper;
+    this.postImageMapper = postImageMapper;
+    this.fileService = fileService;
   }
 
   /**
    * #5 タイムライン取得（F-TL-01, F-TL-02, F-TL-03）。
    *
-   * <p>タイムライン本体はJOIN1本、いいね判定は一括取得で1本の計2本 （docs/06_non_functional.md 1.3 の「3回以内」に対して余裕がある）。
+   * <p>タイムライン本体はJOIN1本、いいね判定と画像の一括取得で計3本 （docs/06_non_functional.md 1.3 の「3回以内」の上限ちょうど。
+   * <b>これ以上SQLを増やせない</b>）。
    */
   @Transactional(readOnly = true)
   public CursorPage<PostSummary> getTimeline(
@@ -52,9 +66,18 @@ public class PostService {
 
     boolean hasNext = rows.size() > limit;
     List<PostRow> page = hasNext ? rows.subList(0, limit) : rows;
-    Set<Long> likedPostIds = likedPostIdsOf(meId, page.stream().map(PostRow::id).toList());
+    List<Long> postIds = page.stream().map(PostRow::id).toList();
+    Set<Long> likedPostIds = likedPostIdsOf(meId, postIds);
+    Map<Long, List<PostImageSummary>> imagesByPostId = imagesOf(postIds);
     List<PostSummary> items =
-        page.stream().map(row -> PostSummary.from(row, likedPostIds.contains(row.id()))).toList();
+        page.stream()
+            .map(
+                row ->
+                    PostSummary.from(
+                        row,
+                        likedPostIds.contains(row.id()),
+                        imagesByPostId.getOrDefault(row.id(), List.of())))
+            .toList();
 
     if (!hasNext || page.isEmpty()) {
       return CursorPage.last(items);
@@ -82,9 +105,18 @@ public class PostService {
 
     boolean hasNext = rows.size() > limit;
     List<PostRow> page = hasNext ? rows.subList(0, limit) : rows;
-    Set<Long> likedPostIds = likedPostIdsOf(meId, page.stream().map(PostRow::id).toList());
+    List<Long> postIds = page.stream().map(PostRow::id).toList();
+    Set<Long> likedPostIds = likedPostIdsOf(meId, postIds);
+    Map<Long, List<PostImageSummary>> imagesByPostId = imagesOf(postIds);
     List<PostSummary> items =
-        page.stream().map(row -> PostSummary.from(row, likedPostIds.contains(row.id()))).toList();
+        page.stream()
+            .map(
+                row ->
+                    PostSummary.from(
+                        row,
+                        likedPostIds.contains(row.id()),
+                        imagesByPostId.getOrDefault(row.id(), List.of())))
+            .toList();
 
     if (!hasNext || page.isEmpty()) {
       return CursorPage.last(items);
@@ -107,6 +139,23 @@ public class PostService {
   }
 
   /**
+   * 投稿ID群に対する添付画像を一括取得する（docs/09_decision_log.md D-45、N+1回避）。
+   *
+   * <p>{@code likedPostIdsOf} と同じパターン。空リストならクエリを投げない。
+   */
+  private Map<Long, List<PostImageSummary>> imagesOf(List<Long> postIds) {
+    if (postIds.isEmpty()) {
+      return Map.of();
+    }
+    return postImageMapper.findByPostIds(postIds).stream()
+        .collect(
+            Collectors.groupingBy(
+                PostImageRow::postId,
+                HashMap::new,
+                Collectors.mapping(PostImageSummary::from, Collectors.toList())));
+  }
+
+  /**
    * #29 新着投稿の件数（設計書#1〜#28には無い、docs/09_decision_log.md D-31）。
    *
    * <p>SC-03 の新着通知バナー用。60秒ごとにポーリングされるため、COUNT(*) 1本だけで済ませ、 投稿本体は返さない。
@@ -116,18 +165,31 @@ public class PostService {
     return postMapper.countNewer(tab, meId, sinceId);
   }
 
-  /** #6 投稿作成（F-PO-01）。 */
+  /**
+   * #6 投稿作成（F-PO-01, F-PO-02）。
+   *
+   * <p>{@code imageFileIds} は自分がアップロードしたファイルのみ指定できる。 {@code FileService.assertOwnedBy}
+   * が存在チェック→404、所有者チェック→403の順で検証する （D-14, D-44）。検証を通ったものだけ {@code post_images} に挿入する。
+   */
   @Transactional
   public PostSummary create(Long meId, CreatePostRequest request) {
+    List<Long> imageFileIds = request.imageFileIdsOrEmpty();
+    imageFileIds.forEach(fileId -> fileService.assertOwnedBy(meId, fileId));
+
     Long newId = postMapper.insert(meId, request.body());
+    for (int i = 0; i < imageFileIds.size(); i++) {
+      postImageMapper.insert(newId, imageFileIds.get(i), i);
+    }
+
     // created_at のサーバー値と author を正確に返すため、作成直後に1回引き直す。
-    // 単発APIなのでSQL2本になるのは許容する。
+    // 単発APIなのでSQLが増えるのは許容する。
     PostRow row =
         postMapper
             .findRowById(newId)
             .orElseThrow(() -> new IllegalStateException("投稿の作成直後に取得できませんでした。id=" + newId));
     // 作成直後の自分の投稿に、自分がいいね済みのはずがないため false 固定でよい
-    return PostSummary.from(row, false);
+    List<PostImageSummary> images = imagesOf(List.of(newId)).getOrDefault(newId, List.of());
+    return PostSummary.from(row, false, images);
   }
 
   /** #7 投稿詳細取得（F-PO-03）。 */
@@ -135,7 +197,8 @@ public class PostService {
   public PostSummary getById(Long meId, Long postId) {
     PostRow row = postMapper.findRowById(postId).orElseThrow(NotFoundException::new);
     boolean isLiked = likedPostIdsOf(meId, List.of(row.id())).contains(row.id());
-    return PostSummary.from(row, isLiked);
+    List<PostImageSummary> images = imagesOf(List.of(row.id())).getOrDefault(row.id(), List.of());
+    return PostSummary.from(row, isLiked, images);
   }
 
   /**
@@ -161,7 +224,9 @@ public class PostService {
 
     PostRow row = postMapper.findRowById(postId).orElseThrow(NotFoundException::new);
     boolean isLiked = likedPostIdsOf(meId, List.of(row.id())).contains(row.id());
-    return PostSummary.from(row, isLiked);
+    // #8 は imageFileIds を受け取らない（画像の差し替え不可）。既存の添付画像はそのまま返す
+    List<PostImageSummary> images = imagesOf(List.of(row.id())).getOrDefault(row.id(), List.of());
+    return PostSummary.from(row, isLiked, images);
   }
 
   /** #9 投稿削除（F-PO-05）。認可の順序は update と同じ（D-14）。 */

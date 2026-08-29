@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.snstimeline.post.PostImageMapper">
+
+  <!--
+    post_images には deleted_at が無い（物理削除）。
+    投稿の論理削除では画像リンクを残す方針（V7のコメント、R-03）。
+  -->
+  <insert id="insert">
+    INSERT INTO post_images (post_id, file_id, display_order)
+    VALUES (#{postId}, #{fileId}, #{displayOrder})
+  </insert>
+
+  <!--
+    stored_files とJOINして width / height も同時に取る（レイアウトシフト防止用）。
+    display_order 順に並べる（LikeMapper.findLikedPostIds と同じくIN句で一括取得）。
+  -->
+  <select id="findByPostIds" resultType="com.example.snstimeline.post.PostImageRow">
+    SELECT
+      pi.post_id AS post_id,
+      pi.file_id AS file_id,
+      sf.width   AS width,
+      sf.height  AS height
+    FROM post_images pi
+    JOIN stored_files sf ON sf.id = pi.file_id
+    WHERE pi.post_id IN
+      <foreach collection="postIds" item="postId" open="(" separator="," close=")">
+        #{postId}
+      </foreach>
+    ORDER BY pi.post_id, pi.display_order
+  </select>
+
+</mapper>
