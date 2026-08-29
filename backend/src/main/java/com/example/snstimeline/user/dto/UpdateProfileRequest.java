@@ -93,4 +93,26 @@ public record UpdateProfileRequest(JsonNode body) {
   public Long avatarFileId() {
     return body.get("avatarFileId").asLong();
   }
+
+  /** coverFileId フィールドがリクエストに含まれているか（値が null でも true。「削除」の指示として扱うため）。 */
+  public boolean hasCoverFileId() {
+    return body.has("coverFileId");
+  }
+
+  /** coverFileId が明示的に null で送られたか（＝カバー画像を削除する指示）。 */
+  public boolean isCoverFileIdNull() {
+    return hasCoverFileId() && body.get("coverFileId").isNull();
+  }
+
+  /** coverFileId が数値以外で送られていないか。{@link #hasCoverFileId()} が true かつ削除でないときだけ意味を持つ。 */
+  public boolean isCoverFileIdInvalid() {
+    return hasCoverFileId() && !isCoverFileIdNull() && !body.get("coverFileId").isNumber();
+  }
+
+  /**
+   * coverFileId。{@link #hasCoverFileId()} が true かつ {@link #isCoverFileIdNull()} が false のときだけ呼ぶこと。
+   */
+  public Long coverFileId() {
+    return body.get("coverFileId").asLong();
+  }
 }

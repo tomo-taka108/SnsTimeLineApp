@@ -995,6 +995,46 @@ Bなら、5箇所すべてで画像を渡さないとコンパイルが通らな
 
 ---
 
+## D-47 画像URLのオリジン解決はフロント側で行う
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-30 |
+| **論点** | `avatarUrl` / `PostImageSummary.url` はバックエンドが `/api/v1/files/{id}` という相対パスを返す（設計判断⑤、LOCAL/S3切り替えの独立性のため）。ブラウザ確認で「投稿画像・アバター画像が表示されない」不具合が見つかった。原因はフロント（:5173）とバックエンド（:8080）が別オリジンのため、相対パスをそのまま `<img src>` に渡すとフロント自身へのリクエストになってしまうこと |
+| **選択肢** | A. バックエンドが絶対URLを組み立てて返す / **B. フロント側で `VITE_API_BASE_URL` のオリジンを前置して解決する** |
+| **決定** | **B** |
+| **状態** | 決定済み |
+
+**理由**
+
+バックエンドに絶対URLを組み立てさせると、`app.storage.type` や動作環境（本番ドメイン等）の知識をレスポンス生成のたびに持ち込むことになり、設計判断⑤の「保存先の詳細をURLに持ち込まない」方針と逆行する。フロントは元々 `VITE_API_BASE_URL` で自分がどのオリジンのAPIを呼んでいるかを知っているため、そこからオリジンだけを取り出して相対パスに前置する方が責務が自然に収まる。
+
+`frontend/src/api/files.ts` に `resolveFileUrl(path: string | null): string | null` を追加し、サーバーレスポンスの画像パスを表示する箇所（`Avatar` / `PostImage` / `PostComposer` のプレビュー / `ProfileEditPage`）はすべてここを通す。
+
+**影響範囲**: `api/files.ts`（`resolveFileUrl` 追加）/ `components/Avatar.tsx` / `components/PostImage.tsx` / `components/PostComposer.tsx` / `pages/profile/ProfileEditPage.tsx`
+
+---
+
+## D-48 プロフィールのカバー画像（`cover_file_id`）を追加する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-30 |
+| **論点** | ブラウザ確認で「プロフィール背景に画像を設定できない」と指摘があった。設計書・機能一覧には元々この機能が存在せず、`.profile-cover` はグラデーションの装飾のみだった。追加するか、未実装として次回に回すか |
+| **選択肢** | A. 未実装のまま次のIssueに送る / **B. `avatar_file_id` と同じ構造で今回追加する** |
+| **決定** | **B**（Issue #19） |
+| **状態** | 決定済み |
+
+**理由**
+
+ユーザーからの要望であり、`avatar_file_id` → `stored_files` の既存パターン（アップロード基盤・所有者チェック・3点セットのリクエストDTO）をそのまま複製できるため実装コストが低い。Issue #18（投稿画像・プロフィール画像）とはスコープが異なるため別Issueとして起票したが、ブランチは分けずに同じPRへ含める（未pushの段階だったため）。
+
+**副次的な発見**: `users.avatar_file_id` のFK制約が `V1__create_users.sql` のコメントで「V2以降で追加する」とされたまま追加されていなかった（`stored_files` はV6で作成されたため、本来V6以降のどこかで追加すべきだった）。今回のV8マイグレーションで `cover_file_id` の追加と合わせて解消する。
+
+**影響範囲**: `V8__add_avatar_and_cover_file_fk.sql`（新規）/ `User.java` / `UserProfile.java` / `UpdateProfileRequest.java` / `UserMapper.java` / `UserMapper.xml` / `UserService.java` / フロントの `ProfileEditPage.tsx` / `ProfilePage.tsx`
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

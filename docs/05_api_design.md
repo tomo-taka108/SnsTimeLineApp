@@ -277,6 +277,11 @@ SELECT post_id FROM likes WHERE user_id = :me AND post_id = ANY(:postIds);
 
 `avatarUrl` は未設定なら `null`。**DBには保存せず、`FileStorageService` が組み立てる**（[04_data_model.md](04_data_model.md) 設計判断⑤）。
 
+> **実際の値はオリジンを含まない `/api/v1/files/{id}` 形式。** 上記の例はイメージのため絶対URLで示しているが、
+> バックエンドはオリジンに依存しない相対パスを返す（LOCAL/S3の切り替えでURLが変わらないようにするため）。
+> フロントとバックエンドは別オリジン（:5173 / :8080）のため、**フロント側で `VITE_API_BASE_URL` のオリジンを
+> 前置してから `<img src>` に渡す**（`frontend/src/api/files.ts` の `resolveFileUrl`、D-47）。
+
 ### `UserListItem` — ユーザー一覧の1行（`UserSummary` の拡張）
 
 「ユーザー行」コンポーネント（[03_screen_design.md](03_screen_design.md)）を表示するための型。**SC-07 / SC-08 / SC-09 / SC-10 で共通**に使う。
@@ -311,6 +316,7 @@ SELECT post_id FROM likes WHERE user_id = :me AND post_id = ANY(:postIds);
   "username": "taro_123",
   "displayName": "たろう",
   "avatarUrl": "http://localhost:8080/api/v1/files/10",
+  "coverUrl": "http://localhost:8080/api/v1/files/11",
   "bio": "学習目的でSNSアプリを作っています。",
   "postCount": 56,
   "followingCount": 12,
@@ -323,6 +329,7 @@ SELECT post_id FROM likes WHERE user_id = :me AND post_id = ANY(:postIds);
 
 | フィールド | 説明 |
 |---|---|
+| `coverUrl` | プロフィール背景（カバー画像）。未設定なら `null`。`avatarUrl` と同じくオリジンを含まない相対パス（D-47） |
 | `postCount` | 論理削除済みを除いた投稿数 |
 | `isFollowing` | リクエストユーザーがこのユーザーをフォローしているか。`isMe: true` の場合は常に `false` |
 | `isMe` | このプロフィールがリクエストユーザー自身か。SC-05の表示分岐に使う |
@@ -805,7 +812,8 @@ UNIQUE制約違反（`DataIntegrityViolationException`）を捕捉して実現�
 {
   "displayName": "たろう（改）",
   "bio": "SNSアプリ開発中",
-  "avatarFileId": 30
+  "avatarFileId": 30,
+  "coverFileId": 31
 }
 ```
 
@@ -814,6 +822,7 @@ UNIQUE制約違反（`DataIntegrityViolationException`）を捕捉して実現�
 | `displayName` | 1〜50文字 |
 | `bio` | 160文字以内。`null` を明示的に送れば削除 |
 | `avatarFileId` | 自分がアップロードしたファイルのみ。`null` で削除 |
+| `coverFileId` | 自分がアップロードしたファイルのみ。`null` で削除（`avatarFileId` と同じ扱い、D-47） |
 
 **レスポンス `200 OK`**: `UserProfile`
 **エラー**: `400 VALIDATION_ERROR` / `404 NOT_FOUND`（存在しない `avatarFileId`）/ `403 FORBIDDEN`（他人のファイルID）

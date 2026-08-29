@@ -71,6 +71,9 @@ public class UserService {
     if (request.isAvatarFileIdInvalid()) {
       throw new ApiException(ErrorCode.VALIDATION_ERROR);
     }
+    if (request.isCoverFileIdInvalid()) {
+      throw new ApiException(ErrorCode.VALIDATION_ERROR);
+    }
 
     String displayName = request.hasDisplayName() ? request.displayName() : null;
     boolean bioProvided = request.hasBio();
@@ -79,14 +82,27 @@ public class UserService {
     boolean avatarProvided = request.hasAvatarFileId();
     Long avatarFileId =
         avatarProvided && !request.isAvatarFileIdNull() ? request.avatarFileId() : null;
+    boolean coverProvided = request.hasCoverFileId();
+    Long coverFileId = coverProvided && !request.isCoverFileIdNull() ? request.coverFileId() : null;
     // null（削除）は自分のファイルかどうかを問わないため検証しない。
     // 存在チェック→404、所有者チェック→403 の順は FileService.assertOwnedBy に集約する（D-14, D-44）
     if (avatarFileId != null) {
       fileService.assertOwnedBy(meId, avatarFileId);
     }
+    if (coverFileId != null) {
+      fileService.assertOwnedBy(meId, coverFileId);
+    }
 
     int affected =
-        userMapper.updateProfile(meId, displayName, bioProvided, bio, avatarProvided, avatarFileId);
+        userMapper.updateProfile(
+            meId,
+            displayName,
+            bioProvided,
+            bio,
+            avatarProvided,
+            avatarFileId,
+            coverProvided,
+            coverFileId);
     if (affected == 0) {
       // 自分自身の操作なので通常起こらないが、論理削除との競合を考慮して念のため判定する
       throw new NotFoundException();

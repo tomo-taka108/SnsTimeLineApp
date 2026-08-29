@@ -185,6 +185,8 @@ export type UserProfile = {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  /** プロフィール背景（カバー画像）。未設定なら null */
+  coverUrl: string | null;
   bio: string | null;
   postCount: number;
   followingCount: number;
@@ -222,6 +224,7 @@ export type UpdateProfilePayload = {
   displayName?: string;
   bio?: string | null;
   avatarFileId?: number | null;
+  coverFileId?: number | null;
 };
 
 /** #21 / #22 フォロー・フォロー解除のレスポンス */

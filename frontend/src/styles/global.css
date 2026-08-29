@@ -354,6 +354,7 @@ button {
   flex-shrink: 0;
   overflow: hidden;
   user-select: none;
+  object-fit: cover;
 }
 
 .avatar-sm {

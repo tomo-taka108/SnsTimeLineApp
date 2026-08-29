@@ -24,6 +24,7 @@ public record UserProfile(
     String username,
     String displayName,
     String avatarUrl,
+    String coverUrl,
     String bio,
     int postCount,
     int followingCount,
@@ -45,11 +46,14 @@ public record UserProfile(
       boolean isMe) {
     String avatarUrl =
         user.avatarFileId() == null ? null : UploadFileResponse.urlOf(user.avatarFileId());
+    String coverUrl =
+        user.coverFileId() == null ? null : UploadFileResponse.urlOf(user.coverFileId());
     return new UserProfile(
         user.id(),
         user.username(),
         user.displayName(),
         avatarUrl,
+        coverUrl,
         user.bio(),
         postCount,
         followingCount,

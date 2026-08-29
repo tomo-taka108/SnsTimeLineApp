@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../../api/ApiError";
+import { resolveFileUrl } from "../../api/files";
 import { deletePost, updatePost } from "../../api/posts";
 import type { PostSummary, UserProfile } from "../../api/types";
 import { fetchProfile } from "../../api/users";
@@ -142,7 +143,18 @@ export function ProfilePage() {
 
         {status === "ready" && profile && (
           <>
-            <div className="profile-cover" />
+            <div
+              className="profile-cover"
+              style={
+                profile.coverUrl
+                  ? {
+                      backgroundImage: `url(${resolveFileUrl(profile.coverUrl)})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }
+                  : undefined
+              }
+            />
             <div className="profile-head">
               <div className="profile-top">
                 <Avatar user={profile} size="lg" />

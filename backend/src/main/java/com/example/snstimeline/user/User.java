@@ -18,6 +18,7 @@ public record User(
     String displayName,
     String bio,
     Long avatarFileId,
+    Long coverFileId,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt,
     OffsetDateTime deletedAt) {
@@ -25,6 +26,7 @@ public record User(
   /** 新規登録用。id と各日時はDB側で採番・設定する。 */
   public static User forSignup(
       String email, String passwordHash, String username, String displayName) {
-    return new User(null, email, passwordHash, username, displayName, null, null, null, null, null);
+    return new User(
+        null, email, passwordHash, username, displayName, null, null, null, null, null, null);
   }
 }

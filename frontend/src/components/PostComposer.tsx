@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES, uploadFile } from "../api/files";
+import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES, resolveFileUrl, uploadFile } from "../api/files";
 import type { PostImageSummary } from "../api/types";
 import { useAuth } from "../auth/useAuth";
 import { countChars, validatePostBody } from "../pages/validation";
@@ -100,7 +100,7 @@ export function PostComposer({
     setIsUploading(true);
     try {
       const uploaded = await uploadFile(file);
-      setImage({ fileId: uploaded.fileId, url: uploaded.url });
+      setImage({ fileId: uploaded.fileId, url: resolveFileUrl(uploaded.url) ?? uploaded.url });
     } catch {
       setError("画像のアップロードに失敗しました");
     } finally {
@@ -179,7 +179,7 @@ export function PostComposer({
             )}
             {!allowImage && existingImage && (
               <div className="image-preview">
-                <img src={existingImage.url} alt="添付画像" />
+                <img src={resolveFileUrl(existingImage.url) ?? existingImage.url} alt="添付画像" />
               </div>
             )}
             {error && (

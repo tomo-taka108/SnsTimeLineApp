@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { resolveFileUrl } from "../api/files";
 import type { PostImageSummary } from "../api/types";
 import { ImageLightbox } from "./ImageLightbox";
 
@@ -14,6 +15,7 @@ type Props = {
  */
 export function PostImage({ image }: Props) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const url = resolveFileUrl(image.url) ?? image.url;
 
   return (
     <>
@@ -26,15 +28,9 @@ export function PostImage({ image }: Props) {
         }}
         aria-label="画像を拡大表示"
       >
-        <img
-          src={image.url}
-          alt=""
-          width={image.width ?? undefined}
-          height={image.height ?? undefined}
-          loading="lazy"
-        />
+        <img src={url} alt="" width={image.width ?? undefined} height={image.height ?? undefined} loading="lazy" />
       </button>
-      <ImageLightbox isOpen={isLightboxOpen} url={image.url} onClose={() => setIsLightboxOpen(false)} />
+      <ImageLightbox isOpen={isLightboxOpen} url={url} onClose={() => setIsLightboxOpen(false)} />
     </>
   );
 }

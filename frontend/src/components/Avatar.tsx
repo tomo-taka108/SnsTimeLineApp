@@ -1,3 +1,4 @@
+import { resolveFileUrl } from "../api/files";
 import type { UserSummary } from "../api/types";
 
 type Props = {
@@ -13,7 +14,7 @@ export function Avatar({ user, size = "md" }: Props) {
 
   if (user.avatarUrl) {
     const px = SIZE_PX[size];
-    return <img className={className} src={user.avatarUrl} alt="" width={px} height={px} />;
+    return <img className={className} src={resolveFileUrl(user.avatarUrl) ?? undefined} alt="" width={px} height={px} />;
   }
 
   // 表示名の1文字目。絵文字が壊れないようコードポイント単位で取り出す
