@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * 例外を統一エラー形式に変換する（docs/05_api_design.md 1.3、F-CO-01）。
@@ -51,6 +52,20 @@ public class GlobalExceptionHandler {
       HttpMessageNotReadableException e, HttpServletRequest request) {
     log.warn("リクエストボディの解析に失敗 path={}", request.getRequestURI());
     return build(ErrorCode.VALIDATION_ERROR, "リクエストの形式が正しくありません", request, null);
+  }
+
+  /**
+   * アップロードサイズ超過（#25）。
+   *
+   * <p>Spring の multipart 制限は Controller に入る前に発火するため、 {@code FileService} のサイズ検証には到達しない。ここで拾わないと
+   * 500 になる （docs/06_non_functional.md 3.5 は 413 を要求している）。
+   */
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+      MaxUploadSizeExceededException e, HttpServletRequest request) {
+    log.warn("アップロードサイズ超過 path={}", request.getRequestURI());
+    return build(
+        ErrorCode.FILE_TOO_LARGE, ErrorCode.FILE_TOO_LARGE.getDefaultMessage(), request, null);
   }
 
   /** パスパラメータ等の型不一致（IDに数値以外が来た場合など）。 */

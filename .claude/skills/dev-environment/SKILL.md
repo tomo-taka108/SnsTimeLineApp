@@ -47,32 +47,98 @@ cd backend  && ./mvnw spring-boot:run    # :8080
 cd frontend && npm run dev               # :5173
 ```
 
-## 初回セットアップ
+## 初回セットアップ（最初の1回だけ）
 
 ```bash
 # 1. 環境変数ファイルを作成（.env はコミットされていない）
 cp .env.example .env
-#    JWT_SECRET には32バイト以上のランダム文字列を設定する
 
 # 2. DB起動
 docker compose up -d
 
-# 3. バックエンド（起動時にFlywayがマイグレーションを自動実行する）
-cd backend && ./mvnw spring-boot:run
-
-# 4. フロントエンド（別ターミナル）
-cd frontend && npm install && npm run dev
+# 3. フロントエンドの依存をインストール
+cd frontend && npm install
 ```
 
-> **重要: Spring Boot は `.env` を自動では読み込まない。**
-> `.env` は「IDEの実行構成やシェルに設定する値の転記元」として使う。
-> `application.yml` の既定値が `.env.example` と一致しているため、
-> **実際に設定が必要なのは `JWT_SECRET` だけ**（既定値が無く、未設定だと起動に失敗する）。
->
-> ```powershell
-> # PowerShell で一時的に設定する例
-> $env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
-> ```
+> **`cp .env.example .env` は最初の1回だけでよい。**
+> `.env` は `.gitignore` で除外されているだけで、**ローカルには残り続ける**。
+> `git pull` しても消えたり上書きされたりしないため、毎回コピーし直す必要はない
+> （既存の `.env` を上書きしないよう、むしろ2回目以降は実行しないこと）。
+
+## 毎回のセッション開始時にやること
+
+**`JWT_SECRET` はターミナルを開き直すたびに設定が必要。**
+
+```powershell
+# PowerShell
+$env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+cd backend
+./mvnw spring-boot:run
+```
+
+```bash
+# bash / Git Bash
+export JWT_SECRET=$(openssl rand -base64 48)
+cd backend && ./mvnw spring-boot:run
+```
+
+**なぜ毎回必要なのか。**
+
+| | 実体 | 寿命 |
+|---|---|---|
+| `.env` ファイル | ディスク上のファイル | 消すまで残る |
+| `$env:JWT_SECRET` | **そのターミナル（プロセス）のメモリ上だけの一時変数** | **ターミナルを閉じると消える** |
+
+**重要: Spring Boot は `.env` を自動では読み込まない。** `.env` は「IDEの実行構成やシェルに
+設定する値の転記元」であり、アプリが実際に読むのは**OSの環境変数**。
+つまり `.env` に `JWT_SECRET` を書いただけでは起動できず、
+**`spring-boot:run` を実行するのと同じターミナルで**環境変数として設定する必要がある。
+`application.yml` の既定値が `.env.example` と一致しているため、
+**既定値が無く必ず設定が必要なのは `JWT_SECRET` だけ**（未設定だと起動に失敗する）。
+
+**コマンドが何をしているか**（`JWT_SECRET` はJWTの署名に使う秘密鍵。これが漏れると
+他人が「自分は誰それだ」という偽のトークンを作れてしまうため、ランダムな値にする）:
+
+1. `1..48 | ForEach-Object { Get-Random -Maximum 256 }` — 0〜255の乱数を48個作る（48バイト分）
+2. `[Convert]::ToBase64String(...)` — それを文字列として扱える形式（Base64）に変換する
+3. `$env:JWT_SECRET = ...` — このターミナルの環境変数として設定する
+
+**S3を使う場合は、加えて `.env` の `APP_STORAGE_TYPE=S3` と AWS の設定が必要**
+（下記「画像の保存先を切り替える」を参照）。上のように `set -a && . ./.env && set +a` で
+`.env` をまとめて読み込むと、`JWT_SECRET` 以外の値も一度に渡せる。
+
+## 画像の保存先を切り替える（LOCAL / S3）
+
+`.env` の `APP_STORAGE_TYPE` 1行で切り替わる（[09_decision_log.md](../../../docs/09_decision_log.md) D-40）。
+
+| 値 | 保存先 | AWSアカウント |
+|---|---|---|
+| `LOCAL`（既定） | `backend/uploads/` | **不要** |
+| `S3` | S3バケット | 必要 |
+
+**既定は `LOCAL`。** AWSアカウントが無くても開発できる状態を保つ方針のため
+（[10_infrastructure.md](../../../docs/10_infrastructure.md) 5章）、`.env.example` も `LOCAL` にしてある。
+
+S3を使う場合は `.env` に以下を設定する（`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` は
+IAMユーザー `sns-timeline-app-s3-uploader` のもの。**コミットしないこと**）:
+
+```
+APP_STORAGE_TYPE=S3
+AWS_S3_BUCKET=snstimelineapp-images-dev
+AWS_S3_REGION=ap-northeast-1
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+```
+
+> **認証情報はコードに書かない。** AWS SDK が「環境変数 → …… → IAMロール」の順に探すため、
+> ローカルでは環境変数、EC2ではIAMロールが自動的に使われる
+> （[10_infrastructure.md](../../../docs/10_infrastructure.md) 4.5）。
+
+保存されたか確認する:
+
+```bash
+aws s3 ls s3://snstimelineapp-images-dev/ --recursive --profile takashima
+```
 
 ### バックエンド単体の動作確認（curl）
 
@@ -133,7 +199,9 @@ docker compose down -v && docker compose up -d
 ```
 
 > **現時点のマイグレーションは `V1__create_users.sql` / `V2__create_refresh_tokens.sql` /
-> `V3__create_posts_and_likes.sql` / `V4__create_follows.sql` / `V5__create_comments.sql` の5本。**
+> `V3__create_posts_and_likes.sql` / `V4__create_follows.sql` / `V5__create_comments.sql` /
+> `V6__create_stored_files.sql` の6本。**
+> （`stored_files` は設計書では `V3` 想定だったが、V3〜V5 が先に埋まったため `V6` で作成した）
 > シードデータ（`V9__insert_seed_data.sql`）は未作成のため、リセット後のDBは空になる。
 > 動作確認用のユーザーは上記「バックエンド単体の動作確認」の signup で作る。
 
@@ -202,9 +270,25 @@ docker compose logs db --tail=50
 ### 画像アップロードが失敗する
 
 - 保存先ディレクトリ（`APP_STORAGE_LOCAL_PATH`、既定 `./uploads`）が存在し書き込み可能か確認する
-- サイズ上限は5MB（`APP_UPLOAD_MAX_SIZE_MB`）。Spring側の
-  `spring.servlet.multipart.max-file-size` でも制限されている点に注意
-- 許可形式は JPEG / PNG / WebP のみ（[docs/06_non_functional.md](../../../docs/06_non_functional.md) 3.5）
+- サイズ上限は5MB（`APP_UPLOAD_MAX_SIZE_MB`）。**5MB超は 413 `FILE_TOO_LARGE`**。
+  Spring側の `spring.servlet.multipart.max-file-size` は20MBの最後の防波堤で、
+  5MBの判定は `FileService` が行う（[09_decision_log.md](../../../docs/09_decision_log.md) D-42）
+- 許可形式は JPEG / PNG / WebP のみ（[docs/06_non_functional.md](../../../docs/06_non_functional.md) 3.5）。
+  **拡張子やContent-Typeではなく先頭バイト（マジックナンバー）で判定する。**
+  `.jpg` にリネームしただけのファイルは 415 `UNSUPPORTED_MEDIA_TYPE` になる（仕様どおり）
+- `S3` 利用時に `403` や認証エラーが出る場合、`.env` の `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY` と、IAMポリシーの対象バケット名を確認する
+
+動作確認（`$ACCESS` は上記 curl 手順で取得したもの）:
+
+```bash
+BASE=http://localhost:8080/api/v1
+# アップロード（201 で fileId が返る）
+curl -s -X POST "$BASE/files" -H "Authorization: Bearer $ACCESS" \
+  -F "file=@/path/to/image.png;type=image/png"
+# 配信（認証不要。<img src> から直接読めることの確認）
+curl -s -o /dev/null -D - "$BASE/files/1" | grep -iE "^HTTP|content-type|cache-control"
+```
 
 ### タイムラインが遅い / N+1 が疑われる
 

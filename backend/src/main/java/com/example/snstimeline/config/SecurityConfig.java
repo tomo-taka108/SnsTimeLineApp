@@ -70,6 +70,12 @@ public class SecurityConfig {
                         "/api/v1/auth/login",
                         "/api/v1/auth/refresh")
                     .permitAll()
+                    // 画像配信（#26）は認証不要。<img src> は Authorization ヘッダを
+                    // 付けられないため。本アプリの投稿はすべて公開なので、
+                    // 画像だけを秘匿しても意味がない（docs/05_api_design.md #26）。
+                    // アップロード（#25, POST）は認証必須のまま
+                    .requestMatchers(HttpMethod.GET, "/api/v1/files/*")
+                    .permitAll()
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

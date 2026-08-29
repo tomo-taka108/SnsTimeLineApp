@@ -71,6 +71,10 @@ cd backend && ./mvnw test
 | プロフィールのカウント算出 | `postCount` / `followingCount` / `followerCount` が実データと一致する（非正規化していないため、D-36） |
 | カーソルページネーション | 同一 `created_at` の投稿が2件あっても取りこぼさない |
 | ファイル所有者チェック | 他人の `fileId` を指定した投稿が403になる |
+| 画像のマジックバイト検証 | `.jpg` にリネームしたテキストファイルが 415 で拒否される（拡張子・Content-Typeだけを見ていないこと、D-42） |
+| アップロードサイズ超過 | 5MB超が **500ではなく 413 `FILE_TOO_LARGE`** になる（Springのmultipart例外を捕捉できているか、D-42） |
+| 画像配信の認証要否 | `GET /files/{id}` が**認証なしで200**、`POST /files` は認証なしで401 |
+| ストレージ抽象化 | `app.storage.type` を LOCAL / S3 で切り替えても、APIのレスポンス（`url` の形）が変わらない（D-40） |
 
 ---
 
