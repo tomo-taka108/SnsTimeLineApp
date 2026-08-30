@@ -1092,13 +1092,54 @@ ORDER BY
 | `lower(username) LIKE 'bulk_user_1%'`（前方一致） | **Index Scan**（`idx_users_username_prefix`、V9が効く） |
 | `lower(username) LIKE '%user_123%'`（中間一致） | **Seq Scan**（B-treeは効かない） |
 
-**本アプリの規模では許容する。** ユーザー数が増えて実測で問題になった時点で対処する（候補: 前方一致で足りるケースを先に返す、あるいは検索専用エンジンの導入）。**V10のGINインデックスは `ORDER BY` の `similarity()` 用として残す。**
+**本アプリの規模では許容する。** ユーザー数が増えて実測で問題になった時点で対処する（候補は [04_data_model.md](04_data_model.md) 6.8）。
+
+> ⚠️ **本エントリは当初「V10のGINインデックスは `ORDER BY` の `similarity()` 用として残す」と記載していたが、これは誤りだった。** `similarity()` は各行のスコアを計算するだけでGINの出番がなく、実行計画にGINは現れない。V9のB-treeも同様に使われていない。**4本とも [D-50](#d-50-使われていないユーザー検索用インデックスを削除する) で削除した。**
 
 **6.3 の記述は撤回せず残す**（判断の履歴自体が学習の記録になるため、7.4の運用どおり）。6.3を読むときは本エントリを併せて参照すること。
 
 **副次的な決定**: `isLikedByMe` / `isFollowing` の一括取得は本実装で**3箇所目**になり、[04_data_model.md](04_data_model.md) 6.6 が共通ヘルパー化の検討を促している箇所に到達した。**検討した結果、[D-38](#d-38-isfollowing-の一括取得は-islikedbyme-と共通化しない) の判断を維持し共通化しない。** 対象テーブル（`likes` / `follows`）とキーの意味が異なり、無理に共通化すると「何のIDの集合か」が型から読み取れなくなるため。
 
 **影響範囲**: `V9__add_user_search_prefix_indexes.sql` / `V10__add_user_search_trgm_indexes.sql`（新規）/ `OffsetPage.java`（新規）/ `UserSearchRow.java`（新規）/ `UserSearchService.java`（新規）/ `UserMapper.java` / `UserMapper.xml` / `UserListItem.java` / `UserController.java` / `ValidationConstants.java` / フロントの `SearchPage.tsx` / `useUserSearch.ts` / `Pagination.tsx`（新規）/ `App.tsx` / `AppHeader.tsx` / `api/users.ts` / `api/client.ts` / `api/types.ts` / `styles/global.css`
+
+---
+
+## D-50 使われていないユーザー検索用インデックスを削除する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-30 |
+| **論点** | [D-49](#d-49-ユーザー検索の第2段階は部分一致に限定しタイプミス補正は入れない) で絞り込みを `LIKE '%q%'` のみにした結果、V9（前方一致のB-tree）と V10（pg_trgm の GIN）の計4本が**実行計画に一度も現れなくなった**。将来のために残すか、削除するか |
+| **選択肢** | A. 将来使うかもしれないので残す / **B. 削除する** |
+| **決定** | **B**（Issue #21） |
+| **状態** | 決定済み |
+
+**確認した事実**
+
+実際の検索SQLの `EXPLAIN ANALYZE` に現れるのは `Seq Scan` と `Sort` だけで、`Index Scan` は出ない。
+
+| 処理 | 索引が効かない理由 |
+|---|---|
+| 絞り込み `LIKE '%q%'` | 左端が不定なのでB-treeを辿れない（6.4） |
+| 並び替え `similarity()` | 各行のスコアを計算するだけ。「誰を探すか」ではないのでGINの逆引きが使われない |
+
+`pg_stat_user_indexes` でも使用回数は 0〜1回（`EXPLAIN` 実験によるもの）で、**合計約15MB を消費していた**。
+
+**理由**
+
+使われないインデックスはコストだけ残る。
+
+1. **書き込みが遅くなる** — ユーザー登録・プロフィール編集のたびに4本を更新する
+2. **ディスクを消費する** — 特にGINは断片を持つので大きい
+3. **読む人を混乱させる** — 「インデックスがあるのに効かない」状態は、学習段階では特に有害
+
+**本アプリが数十万ユーザーを抱えることはない。** 「将来使うかもしれない」で不要なものを残さない（YAGNI）。件数が増えて実測で問題になったら、そのとき必要なものを作り直す。想定される対処は [04_data_model.md](04_data_model.md) 6.8 に「そのとき考えればよいこと」として簡単に書き残した。
+
+**pg_trgm 拡張そのものは削除しない。** `ORDER BY` の `similarity()` で使っており、`DROP EXTENSION` すると検索SQLが実行時エラーになる。**拡張（関数を提供する）とGINインデックス（逆引き表）は別物**である点に注意。
+
+**適用済みマイグレーションは編集しない**規約（[04_data_model.md](04_data_model.md) 7章）に従い、V9 / V10 のファイルは残したまま、削除する `V11__drop_unused_user_search_indexes.sql` を追加する。**「作って、使われないと分かって、消した」という履歴自体が記録として残る。**
+
+**影響範囲**: `V11__drop_unused_user_search_indexes.sql`（新規）/ [04_data_model.md](04_data_model.md) 4章 ⑧⑨・6.8・7章
 
 ---
 

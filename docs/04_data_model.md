@@ -624,24 +624,24 @@ CREATE INDEX idx_likes_user_post
 CREATE INDEX idx_post_images_post
   ON post_images (post_id, display_order);
 
--- ⑧ ユーザー検索・第1段階（F-US-05、Phase2）: 前方一致
---    ILIKE 'q%' でインデックスを効かせるため text_pattern_ops + lower() の式インデックスにする
-CREATE INDEX idx_users_username_prefix
-  ON users (lower(username) text_pattern_ops)
-  WHERE deleted_at IS NULL;
-CREATE INDEX idx_users_display_name_prefix
-  ON users (lower(display_name) text_pattern_ops)
-  WHERE deleted_at IS NULL;
+-- ⑧⑨ ユーザー検索用のインデックスは【作成後に削除した】（09_decision_log.md D-50）。
+--     下記は当初の計画であり、現在のDBには存在しない。
+--
+-- -- ⑧ 第1段階: 前方一致
+-- CREATE INDEX idx_users_username_prefix     ON users (lower(username) text_pattern_ops)     WHERE deleted_at IS NULL;
+-- CREATE INDEX idx_users_display_name_prefix ON users (lower(display_name) text_pattern_ops) WHERE deleted_at IS NULL;
+-- -- ⑨ 第2段階: pg_trgm
+-- CREATE INDEX idx_users_username_trgm     ON users USING gin (username gin_trgm_ops);
+-- CREATE INDEX idx_users_display_name_trgm ON users USING gin (display_name gin_trgm_ops);
 
--- ⑨ ユーザー検索・第2段階（F-US-05、Phase2）: 中間一致 / あいまい一致
+-- pg_trgm 拡張そのものは残っている（ORDER BY の similarity() で使うため）
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX idx_users_display_name_trgm
-  ON users USING gin (display_name gin_trgm_ops);
-CREATE INDEX idx_users_username_trgm
-  ON users USING gin (username gin_trgm_ops);
 ```
 
-> **⑧と⑨は用途が違うので両方作る。** 前方一致（⑧）とあいまい一致（⑨）ではプランナが選ぶインデックスが異なる。詳細は6章。
+> **⑧⑨は V9 / V10 で作成したが、V11 で削除した**（[09_decision_log.md](09_decision_log.md) D-50）。
+> 最終的な検索SQLは中間一致 `LIKE '%q%'` だけで絞り込む形（D-49）になり、**4本とも実行計画に一度も現れなかった**ため。
+> 絞り込みは左端が不定でB-treeが効かず、並び替えの `similarity()` は各行のスコア計算なのでGINの出番がない。
+> 「作って、使われないと分かって、消した」経緯は判断ログに残している。
 
 ### 4.1 部分インデックス（`WHERE deleted_at IS NULL`）を使う理由
 
@@ -868,7 +868,26 @@ WHERE follower_id = :me AND followee_id = ANY(:userIds);
 
 > **`isLikedByMe` と `isFollowing` は同じパターンの繰り返しである。** 3箇所目（SC-08 / SC-09のフォロー一覧）でも同じ問題が出るので、**共通のヘルパーに切り出すことを検討する**とよい。
 
-### 6.7 対象外とするもの
+### 6.7 ユーザーが増えたときに考えること（今は不要）
+
+現在の検索は `LIKE '%q%'` で全件走査（`Seq Scan`）する。**数万件までは数ミリ秒で終わるため対処不要**だが、
+将来ユーザーが増えて実測で遅くなったら、以下のような手がある。**先回りして実装しないこと**（D-50、YAGNI）。
+
+| 規模の目安 | 対処 |
+|---|---|
+| 〜数万件 | **今のまま**。Seq Scan で問題ない |
+| 〜数十万件 | 前方一致で足りるケースを先に返す（B-treeが効く）。それでも足りなければ pg_trgm の `%` 演算子で候補を絞り、`LIKE` で確定する2段構え（ただしD-49の閾値問題に注意） |
+| 数百万件〜 | **検索専用エンジン（Elasticsearch 等）へ分離する。** DBは「正しいデータを保つ」役、検索エンジンは「速く探す」役に分ける |
+
+**大規模サービスが中間一致を高速に返せる仕組み**（参考）:
+
+- **登録時に「探せる形」に変換しておく。** 例えば edge n-gram は `tanaka_taro` を `t, ta, tan, tana, ...` と前方から展開して索引に入れる。**中間一致を前方一致の集合に変換する**発想で、検索時のコストを保存時のコストに付け替えている
+- **そもそも全件を検索しない。** フォロー中・相互フォローなど「関係の近い人」を先に絞ってから全体を補う
+- **上位N件で打ち切る。** 該当2万件を正確に順位付けする必要はない
+
+いずれも**本アプリの規模では過剰**である。運用コスト（別サーバー、データ同期、同期ズレの対処）が実装コストを上回る。
+
+### 6.8 対象外とするもの
 
 | 項目 | 理由 |
 |---|---|
@@ -898,8 +917,11 @@ src/main/resources/db/migration/
 ── ここまでMVP / ここからPhase2 ──────────────
 
 ├─ V9__add_user_search_prefix_indexes.sql   4章 ⑧（前方一致・6.2）
-└─ V10__add_user_search_trgm_indexes.sql    4章 ⑨（pg_trgm・6.3、D-49）
+├─ V10__add_user_search_trgm_indexes.sql    4章 ⑨（pg_trgm・6.3、D-49）
+└─ V11__drop_unused_user_search_indexes.sql V9/V10 を削除（使われなかったため。D-50）
 ```
+
+> **V9 / V10 を V11 で削除している。** 一見すると無駄だが、**適用済みマイグレーションは編集しない**規約のため、作ったものを消すには新しいバージョンを切るしかない。「作って、使われないと分かって、消した」という履歴が残るのは正しい状態である。
 
 > **インデックスを1本の `V*__create_indexes.sql` にまとめず、各テーブルの作成マイグレーションに同梱した。** テーブルとその索引を同じファイルで読めるほうが追いやすいため。当初の計画（`V9__create_indexes.sql` に集約、検索用は `V11` / `V12`）とは番号もファイル構成も変わっている。**適用済みマイグレーションは編集しない**という規約があるため、以降も番号を振り直さない。
 
