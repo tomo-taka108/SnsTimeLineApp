@@ -10,14 +10,15 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
 import { ProfileEditPage } from "./pages/profile/ProfileEditPage";
 import { ProfilePage } from "./pages/profile/ProfilePage";
+import { SearchPage } from "./pages/search/SearchPage";
 import { SignupPage } from "./pages/SignupPage";
 import { TimelinePage } from "./pages/timeline/TimelinePage";
 
 /**
  * ルート定義（docs/03_screen_design.md 2章の画面一覧に対応）。
  *
- * 実装済みは SC-01 / SC-02 / SC-03 / SC-04 / SC-05 / SC-06 / SC-08 / SC-09 / SC-12。
- * ユーザー検索（SC-07, Phase2）といいねしたユーザー一覧（SC-10, Phase2）は未実装のため SC-12 に落ちる。
+ * 実装済みは SC-01〜SC-09 と SC-12。
+ * いいねしたユーザー一覧（SC-10）とアカウント設定（SC-11）は未実装のため SC-12 に落ちる。
  */
 export function App() {
   const { sessionExpired, clearSessionExpired } = useAuth();
@@ -95,6 +96,14 @@ export function App() {
         element={
           <RequireAuth>
             <ProfileEditPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/search"
+        element={
+          <RequireAuth>
+            <SearchPage />
           </RequireAuth>
         }
       />

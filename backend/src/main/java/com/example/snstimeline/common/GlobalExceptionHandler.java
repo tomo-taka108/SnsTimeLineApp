@@ -8,6 +8,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -73,6 +74,19 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleTypeMismatch(
       MethodArgumentTypeMismatchException e, HttpServletRequest request) {
     return build(ErrorCode.VALIDATION_ERROR, "パラメータの形式が正しくありません", request, null);
+  }
+
+  /**
+   * 必須のクエリパラメータが無い（{@code GET /users} を {@code q} なしで呼んだ場合など）。
+   *
+   * <p>これが無いと最後の {@code Exception} ハンドラに落ちて<b>500になる</b>。 クライアントの誤りなので400が正しい（docs/05_api_design.md
+   * #20 は {@code q} 未指定を VALIDATION_ERROR と規定している）。
+   */
+  @ExceptionHandler(MissingServletRequestParameterException.class)
+  public ResponseEntity<ErrorResponse> handleMissingParameter(
+      MissingServletRequestParameterException e, HttpServletRequest request) {
+    log.warn("必須パラメータ不足 param={} path={}", e.getParameterName(), request.getRequestURI());
+    return build(ErrorCode.VALIDATION_ERROR, "必要なパラメータが指定されていません", request, null);
   }
 
   /** 業務例外（409 / 401 / 404 など）。 */

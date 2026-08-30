@@ -64,6 +64,77 @@
   </select>
 
   <!--
+    #20 ユーザー検索の絞り込み条件（docs/04_data_model.md 6章 / docs/09_decision_log.md D-49）。
+    searchUsers と countSearchUsers で共有する。条件がずれると総ページ数と実際の件数が
+    食い違うため、必ずこの1箇所だけを直すこと。
+
+    テーブル別名を付けていないのは、activeOnly が別名なしの `deleted_at IS NULL` で
+    定義されているため（このSQLは users 単表なので別名は不要）。
+
+    絞り込みは LIKE '%q%' だけで行う。pg_trgm の % 演算子を AND で重ねてはいけない。
+
+    当初は「% 演算子でGINを使って候補を絞り、LIKE で確定させる」形にしていたが、
+    実機で誤りが判明した。% 演算子は類似度が閾値（既定0.3）以上かを見るもので、
+    「部分文字列を含むか」の上位集合ではない。実データでは次のようになる。
+
+      display_name='田中たろう', q='たろう'
+        LIKE '%たろう%'        -> true （含んでいる。出すべき）
+        similarity()          -> 0.25  （閾値0.3未満なので % は false）
+        word_similarity()     -> 0.5   （閾値0.6未満なので <% も false）
+
+    つまり % を AND で重ねると、本来ヒットすべき部分一致が落ちる。特に日本語は
+    3文字の検索語だとトライグラムが少なく、前後に文字が付くだけで類似度が急落する。
+    閾値を下げれば拾えるが、今度は「たろお」のようなタイプミスまで通ってしまい
+    D-49（部分一致に限定する）の意図に反する。両立しないため、% での絞り込みは行わない。
+
+    GINインデックス（V10）は ORDER BY の similarity() 用として残る。
+    WHERE には使われないため、この検索は Seq Scan になる。本アプリの規模では問題なく、
+    件数が増えて実測で問題になった時点で対処する（docs/09_decision_log.md D-49）。
+
+    qEscaped は LIKE メタ文字をエスケープ済み、qRaw は similarity() に渡す生の値。
+    qEscaped のエスケープを忘れると q=% で全ユーザーが列挙される（同 6.5 要求3）。
+  -->
+  <sql id="searchWhere">
+    WHERE <include refid="activeOnly"/>
+      AND id &lt;&gt; #{meId}
+      AND (
+            lower(username)     LIKE '%' || lower(#{qEscaped}) || '%' ESCAPE '\'
+         OR lower(display_name) LIKE '%' || lower(#{qEscaped}) || '%' ESCAPE '\'
+          )
+  </sql>
+
+  <!--
+    #20 ユーザー検索（F-US-05）。本アプリで唯一のオフセットページネーション
+    （docs/05_api_design.md 2.2）。
+
+    ORDER BY の末尾に id を必ず入れること。オフセット方式で並び順が不定だと、
+    2ページ目に1ページ目と同じユーザーが現れたり取りこぼしたりする
+    （カーソル方式のタイブレーカーとまったく同じ理屈、docs/04_data_model.md 6.2）。
+  -->
+  <select id="searchUsers" resultType="com.example.snstimeline.user.UserSearchRow">
+    SELECT id AS user_id, username, display_name, bio, avatar_file_id
+    FROM users
+    <include refid="searchWhere"/>
+    ORDER BY
+      <!-- ① 前方一致を最優先。第1段階（V9の式インデックス）の意図を順位として残す -->
+      CASE WHEN lower(username)     LIKE lower(#{qEscaped}) || '%' ESCAPE '\' THEN 0
+           WHEN lower(display_name) LIKE lower(#{qEscaped}) || '%' ESCAPE '\' THEN 1
+           ELSE 2 END,
+      <!-- ② 関連度。第2段階（V10のGINインデックス）。ここでだけ similarity() を使う -->
+      GREATEST(similarity(username, #{qRaw}), similarity(display_name, #{qRaw})) DESC,
+      <!-- ③ タイブレーカー。省略不可 -->
+      id
+    LIMIT #{size} OFFSET #{offset}
+  </select>
+
+  <!-- #20 の総件数。searchWhere を共有する（条件を二重管理しない） -->
+  <select id="countSearchUsers" resultType="long">
+    SELECT COUNT(*)
+    FROM users
+    <include refid="searchWhere"/>
+  </select>
+
+  <!--
     #19 プロフィール編集。送られたフィールドのみ更新する。
     displayName は null なら SET 句自体を出さない（COALESCE ではなく <if> で分岐する。
     COALESCE(#{displayName}, display_name) だと「null を明示的に送って消す」場合と

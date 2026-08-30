@@ -7,7 +7,6 @@ import { Avatar } from "./Avatar";
  * 共通ヘッダー（docs/03_screen_design.md 4.1）。
  *
  * ログイン時のみ表示する。SC-01 / SC-02 では出さない。
- * 検索アイコンは該当画面（SC-07, Phase2）が未実装のため今回は置かない。
  */
 export function AppHeader() {
   const { user, logout } = useAuth();
@@ -56,6 +55,10 @@ export function AppHeader() {
       </Link>
 
       <div className="header-actions">
+        <Link className="icon-btn" to="/search" title="ユーザーを検索" aria-label="ユーザーを検索">
+          <span aria-hidden="true">🔍</span>
+        </Link>
+
         <div className="avatar-menu" ref={menuRef}>
           <button
             className="avatar-menu-trigger"

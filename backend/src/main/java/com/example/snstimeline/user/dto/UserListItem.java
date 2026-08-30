@@ -2,6 +2,7 @@ package com.example.snstimeline.user.dto;
 
 import com.example.snstimeline.file.dto.UploadFileResponse;
 import com.example.snstimeline.follow.FollowRow;
+import com.example.snstimeline.user.UserSearchRow;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -33,5 +34,20 @@ public record UserListItem(
         row.avatarFileId() == null ? null : UploadFileResponse.urlOf(row.avatarFileId());
     return new UserListItem(
         row.userId(), row.username(), row.displayName(), avatarUrl, row.bio(), isFollowing, isMe);
+  }
+
+  /**
+   * 検索結果SQLの1行から組み立てる（#20）。
+   *
+   * <p><b>{@code isMe} は常に false。</b> 検索は自分自身を結果から除外するため （SQLの {@code id <>
+   * meId}、docs/04_data_model.md 6.5 要求6）、自分の行は到達しない。
+   *
+   * @param isFollowing 呼び出し側が一括取得した「自分がフォロー済みか」の判定結果を渡す （docs/04_data_model.md 6.6、N+1回避）
+   */
+  public static UserListItem fromSearchRow(UserSearchRow row, boolean isFollowing) {
+    String avatarUrl =
+        row.avatarFileId() == null ? null : UploadFileResponse.urlOf(row.avatarFileId());
+    return new UserListItem(
+        row.userId(), row.username(), row.displayName(), avatarUrl, row.bio(), isFollowing, false);
   }
 }

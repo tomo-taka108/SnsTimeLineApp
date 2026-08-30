@@ -2,6 +2,7 @@ package com.example.snstimeline.user;
 
 import com.example.snstimeline.auth.AuthPrincipal;
 import com.example.snstimeline.common.CursorPage;
+import com.example.snstimeline.common.OffsetPage;
 import com.example.snstimeline.follow.FollowService;
 import com.example.snstimeline.follow.dto.FollowResponse;
 import com.example.snstimeline.post.PostService;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
 /**
- * ユーザー・プロフィール・フォローAPI（docs/05_api_design.md #17〜#19, #21〜#24）。
+ * ユーザー・プロフィール・検索・フォローAPI（docs/05_api_design.md #17〜#24）。
  *
  * <p>すべて {@code /api/v1/users} 配下に収まるため、{@code CommentController} のように パスをメソッドごとに書き分ける必要はない（クラスレベルの
  * {@code @RequestMapping} で集約する）。
@@ -32,14 +33,38 @@ import tools.jackson.databind.JsonNode;
 public class UserController {
 
   private final UserService userService;
+  private final UserSearchService userSearchService;
   private final PostService postService;
   private final FollowService followService;
 
   public UserController(
-      UserService userService, PostService postService, FollowService followService) {
+      UserService userService,
+      UserSearchService userSearchService,
+      PostService postService,
+      FollowService followService) {
     this.userService = userService;
+    this.userSearchService = userSearchService;
     this.postService = postService;
     this.followService = followService;
+  }
+
+  /**
+   * #20 ユーザー検索（F-US-05）。<b>唯一のオフセットページネーション</b>（docs/05_api_design.md 2.2）。
+   *
+   * <p>空パスのマッピング（{@code GET /api/v1/users}）は {@code @GetMapping("/{userId}")} と衝突しない。
+   *
+   * <p>{@code q} を {@code required = true}（既定）にしているが、未指定時の400は Spring が投げる {@code
+   * MissingServletRequestParameterException} 由来になる。空文字・長すぎる値の検証は {@link UserSearchService}
+   * が行う。{@code ?page=abc} のような型不一致も既存の {@code MethodArgumentTypeMismatchException}
+   * ハンドラが400にするため、ここでの追加実装は不要。
+   */
+  @GetMapping
+  public OffsetPage<UserListItem> searchUsers(
+      @AuthenticationPrincipal AuthPrincipal principal,
+      @RequestParam String q,
+      @RequestParam(required = false) Integer page,
+      @RequestParam(required = false) Integer size) {
+    return userSearchService.search(principal.userId(), q, page, size);
   }
 
   /** #17 プロフィール取得（F-US-01, F-US-02）。 */

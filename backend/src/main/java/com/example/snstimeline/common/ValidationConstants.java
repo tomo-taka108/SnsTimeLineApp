@@ -21,6 +21,20 @@ public final class ValidationConstants {
   /** 1投稿あたりの添付画像数。DBは4枚まで対応するが、MVPのAPIは1枚に制限する（docs/04_data_model.md 2.6）。 */
   public static final int POST_IMAGE_COUNT_MAX = 1;
 
+  /**
+   * #20 ユーザー検索のキーワード長（docs/05_api_design.md #20）。
+   *
+   * <p>下限を1文字にするのは、空文字での全件取得を防ぐため（docs/04_data_model.md 6.5 要求4）。
+   */
+  public static final int SEARCH_QUERY_MIN = 1;
+
+  public static final int SEARCH_QUERY_MAX = 50;
+
+  /** #20 ユーザー検索の1ページあたり件数（docs/05_api_design.md #20）。 */
+  public static final int SEARCH_SIZE_DEFAULT = 20;
+
+  public static final int SEARCH_SIZE_MAX = 50;
+
   /** ユーザー名は半角英数字とアンダースコアのみ。DBの ck_users_username_format と同じ。 */
   public static final String USERNAME_PATTERN = "^[a-zA-Z0-9_]+$";
 
