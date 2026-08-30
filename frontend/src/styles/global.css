@@ -1259,6 +1259,17 @@ button {
   word-break: break-word;
 }
 
+/* F-CM-03 インライン編集: comment-item は既に左にアバターを描画済みなので、
+   コメント内の comment-form は二重にならないよう余白を詰めてアバターを隠す */
+.comment-item .comment-form {
+  padding: 4px 0 0;
+  border-bottom: none;
+}
+
+.comment-item .comment-form > .avatar {
+  display: none;
+}
+
 /* ===== プロフィール（SC-05） ===== */
 .profile-cover {
   height: 130px;

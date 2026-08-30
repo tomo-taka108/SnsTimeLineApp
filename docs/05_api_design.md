@@ -717,10 +717,26 @@ SQLは [04_data_model.md](04_data_model.md) 5.1 / 5.2 を参照。
 
 ### #12 `PATCH /comments/{commentId}` — コメント編集（Phase2）
 
-**認証**: 必要 / **機能**: F-CM-03
+> **[09_decision_log.md](09_decision_log.md) D-51 によりMVPへ前倒し実装した。** 見出しの「Phase2」は当初の優先度の記録として残す（[02_feature_list.md](02_feature_list.md) F-CM-03も同様）。
 
-**リクエスト**: `{ "body": "..." }` / **レスポンス `200 OK`**: `Comment`
-**エラー**: `403 FORBIDDEN` / `404 NOT_FOUND`
+**認証**: 必要 / **機能**: F-CM-03 / **画面**: SC-04
+
+**リクエスト**
+```json
+{ "body": "ありがとうございます。またゆっくり行ってみます！" }
+```
+
+**バリデーション**
+
+| 項目 | 内容 |
+|---|---|
+| `body` | 必須、1〜280文字（前後の空白はトリム後に判定。空白のみは不可） |
+
+**レスポンス `200 OK`**: `Comment`（`editedAt` に現在時刻が入る）
+**エラー**: `400 VALIDATION_ERROR` / `403 FORBIDDEN`（自分のコメントではない）/ `404 NOT_FOUND`
+
+> **`commentCount` は返さない。** 編集は `posts.comment_count` を変更しないため（[09_decision_log.md](09_decision_log.md) D-01 の対象外）。
+> **編集UIはモーダルではなくインライン編集。** 専用モーダル（MD-04相当）は設けない（D-51）。
 
 ---
 

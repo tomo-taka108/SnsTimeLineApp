@@ -712,6 +712,10 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 .comment-item .comment-main { flex: 1; min-width: 0; }
 .comment-item .comment-text { margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
 
+/* F-CM-03 コメント編集（インライン。docs/09_decision_log.md D-51） */
+.comment-edit { margin-top: 6px; }
+.comment-edit .comment-form-foot { justify-content: flex-end; }
+
 /* ===== モーダル（MD-01 / 02 / 03） ===== */
 .modal-backdrop {
   position: fixed;

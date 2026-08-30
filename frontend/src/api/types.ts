@@ -155,11 +155,7 @@ export type UpdatePostPayload = {
   body: string;
 };
 
-/**
- * コメント（docs/05_api_design.md 4章 Comment）。
- *
- * editedAt はコメント編集（#12）がPhase2のため今回は常に null。
- */
+/** コメント（docs/05_api_design.md 4章 Comment）。 */
 export type Comment = {
   id: number;
   author: UserSummary;
@@ -183,6 +179,11 @@ export type CreateCommentResponse = {
 /** #13 コメント削除のレスポンス */
 export type DeleteCommentResponse = {
   commentCount: number;
+};
+
+/** #12 コメント編集のリクエスト（docs/09_decision_log.md D-51 によりMVPへ前倒し） */
+export type UpdateCommentPayload = {
+  body: string;
 };
 
 /** #14 / #15 いいね・いいね解除のレスポンス */
