@@ -120,6 +120,23 @@ export type CursorPage<T> = {
   hasNext: boolean;
 };
 
+/**
+ * オフセットページネーションの共通レスポンス（docs/05_api_design.md 4章 OffsetPage）。
+ *
+ * <b>#20 ユーザー検索だけがこれを使う</b>（docs/05_api_design.md 2.2）。
+ * 新着が絶えず挿入されるタイムラインは CursorPage（挿入されてもページ境界がずれない）、
+ * 並びが安定していてページ番号で飛びたい検索はこちら、という使い分け。
+ */
+export type OffsetPage<T> = {
+  items: T[];
+  /** 0始まり */
+  page: number;
+  size: number;
+  totalElements: number;
+  /** 0件のときは 0 */
+  totalPages: number;
+};
+
 /** #29 GET /timeline/new-count のレスポンス。設計書#1〜#28には無い独自API（D-31） */
 export type NewCountResponse = {
   count: number;

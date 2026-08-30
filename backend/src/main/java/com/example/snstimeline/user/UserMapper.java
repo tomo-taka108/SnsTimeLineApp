@@ -1,5 +1,6 @@
 package com.example.snstimeline.user;
 
+import java.util.List;
 import java.util.Optional;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -44,6 +45,37 @@ public interface UserMapper {
    * idx_posts_user_created} で索引だけで数えられる。
    */
   int countPosts(@Param("userId") Long userId);
+
+  /**
+   * #20 ユーザー検索（F-US-05）。<b>唯一のオフセットページネーション</b>（docs/05_api_design.md 2.2）。
+   *
+   * <p>キーワードを2種類の形で受け取る。用途が違うため呼び出し側で使い分けること。
+   *
+   * <ul>
+   *   <li>{@code qEscaped} — LIKE のメタ文字（{@code % _ \}）をエスケープ済みの値。 <b>エスケープを忘れると {@code q=%}
+   *       で全ユーザーが列挙される</b>（docs/04_data_model.md 6.5 要求3）。 パラメータバインディングでは防げない情報漏洩なので、必ず {@link
+   *       UserSearchService} のエスケープを通す
+   *   <li>{@code qRaw} — pg_trgm の {@code %} 演算子（類似判定）に渡す生の値。 こちらは LIKE
+   *       パターンではないためエスケープしてはいけない（エスケープするとバックスラッシュ自体が 比較対象の文字になり、一致しなくなる）
+   * </ul>
+   *
+   * @param meId 検索結果から除外する自分自身のID（docs/04_data_model.md 6.5 要求6）
+   */
+  List<UserSearchRow> searchUsers(
+      @Param("qEscaped") String qEscaped,
+      @Param("qRaw") String qRaw,
+      @Param("meId") Long meId,
+      @Param("size") int size,
+      @Param("offset") int offset);
+
+  /**
+   * #20 の総件数（{@code OffsetPage.totalElements} 用）。
+   *
+   * <p>{@link #searchUsers} と<b>まったく同じ WHERE 句</b>を使う（XML側で {@code <sql>} 断片を共有している）。
+   * 条件がずれると総ページ数と実際の結果件数が食い違うため、片方だけ変更しないこと。
+   */
+  long countSearchUsers(
+      @Param("qEscaped") String qEscaped, @Param("qRaw") String qRaw, @Param("meId") Long meId);
 
   /**
    * #19 プロフィール編集。送られたフィールドのみ更新する。

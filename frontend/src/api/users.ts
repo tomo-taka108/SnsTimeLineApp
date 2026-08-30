@@ -2,6 +2,7 @@ import { request } from "./client";
 import type {
   CursorPage,
   FollowResponse,
+  OffsetPage,
   PostSummary,
   UpdateProfilePayload,
   UserListItem,
@@ -9,8 +10,26 @@ import type {
 } from "./types";
 
 /**
- * ユーザー・プロフィール・フォローAPIの呼び出し（docs/05_api_design.md #17〜#19, #21〜#24）。
+ * ユーザー・プロフィール・検索・フォローAPIの呼び出し（docs/05_api_design.md #17〜#24）。
  */
+
+/**
+ * #20 ユーザー検索。<b>唯一のオフセットページネーション</b>（docs/05_api_design.md 2.2）。
+ *
+ * <b>q が空のまま呼ばないこと。</b> サーバーは400を返す。未入力時は呼び出し自体を抑止する
+ * （docs/03_screen_design.md SC-07）。
+ *
+ * @param signal 入力が変わったときに古いリクエストを中断するための AbortSignal。
+ *   中断されると AbortError を投げるので、呼び出し側で握りつぶす
+ */
+export function searchUsers(
+  q: string,
+  page = 0,
+  signal?: AbortSignal,
+): Promise<OffsetPage<UserListItem>> {
+  const params = new URLSearchParams({ q, page: String(page) });
+  return request<OffsetPage<UserListItem>>(`/users?${params}`, { signal });
+}
 
 /** #17 プロフィール取得 */
 export function fetchProfile(userId: number): Promise<UserProfile> {

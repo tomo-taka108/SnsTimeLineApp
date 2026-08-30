@@ -778,6 +778,8 @@ LIMIT :size OFFSET :offset;
 
 ### 6.3 第2段階 — pg_trgm によるあいまい一致
 
+> ⚠️ **本節の「タイプミス耐性」は [09_decision_log.md](09_decision_log.md) D-49 で撤回された。** 実装は**部分一致に限定**し、GINインデックスで候補を絞ったうえで最終判定を `LIKE '%q%'` で行う（`similarity()` は並び順にのみ使う）。人名・アカウント検索でタイプミス補正を入れないのが実務の主流であり、誤フォローの実害があるため。**本節は判断の履歴として残している。** pg_trgm の仕組みの解説としては引き続き有効。
+
 前方一致だけでは「田中たろう」を「たろう」で検索しても見つからない。**第2段階で中間一致とタイプミス耐性を足す。**
 
 ```sql
@@ -880,28 +882,26 @@ WHERE follower_id = :me AND followee_id = ANY(:userIds);
 
 ## 7. マイグレーション方針
 
-**Flyway** を使用する想定。
+**Flyway** を使用する。以下は**実際に適用されているファイル**である（計画ではなく現状）。
 
 ```
 src/main/resources/db/migration/
-├─ V1__create_users.sql            ← 作成済み（認証実装時）
-├─ V2__create_refresh_tokens.sql   ← 作成済み（リフレッシュトークン導入時。D-29）
-├─ V3__create_stored_files.sql
-├─ V4__create_posts.sql
-├─ V5__create_comments.sql
-├─ V6__create_likes.sql
-├─ V7__create_follows.sql
-├─ V8__create_post_images.sql
-├─ V9__create_indexes.sql          MVPで必要なインデックス（4章 ①〜⑦）
-└─ V10__insert_seed_data.sql       （開発環境のみ）
+├─ V1__create_users.sql                     認証実装時
+├─ V2__create_refresh_tokens.sql            リフレッシュトークン導入時（D-29）
+├─ V3__create_posts_and_likes.sql           投稿・いいね（4章 ①〜④⑥ を含む）
+├─ V4__create_follows.sql                   フォロー
+├─ V5__create_comments.sql                  コメント（4章 ⑤）
+├─ V6__create_stored_files.sql              画像アップロード基盤（D-40）
+├─ V7__create_post_images.sql               投稿画像（4章 ⑦）
+└─ V8__add_avatar_and_cover_file_fk.sql     アバター/カバーのFK（D-48）
 
 ── ここまでMVP / ここからPhase2 ──────────────
 
-├─ V11__add_user_search_prefix_index.sql   4章 ⑧（前方一致・6.2）
-└─ V12__add_user_search_trgm_index.sql     4章 ⑨（pg_trgm・6.3）
+├─ V9__add_user_search_prefix_indexes.sql   4章 ⑧（前方一致・6.2）
+└─ V10__add_user_search_trgm_indexes.sql    4章 ⑨（pg_trgm・6.3、D-49）
 ```
 
-> **`V2` が `refresh_tokens` になったため、以降の番号を1つずつ繰り下げた。** 当初の計画では `V2` が `stored_files` だった。**適用済みの `V1` / `V2` は編集しない**（規約どおり）。未作成のものは番号を変えて問題ない。
+> **インデックスを1本の `V*__create_indexes.sql` にまとめず、各テーブルの作成マイグレーションに同梱した。** テーブルとその索引を同じファイルで読めるほうが追いやすいため。当初の計画（`V9__create_indexes.sql` に集約、検索用は `V11` / `V12`）とは番号もファイル構成も変わっている。**適用済みマイグレーションは編集しない**という規約があるため、以降も番号を振り直さない。
 
 > **ユーザー検索のインデックスを `V9` に含めない。** 検索はPhase2であり、段階式で導入する（6.4）。**適用済みマイグレーションは編集しない**という規約があるため、後から `V9` に追記することはできない。段階ごとに新しいバージョンを切る。
 

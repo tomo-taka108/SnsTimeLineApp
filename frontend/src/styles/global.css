@@ -339,6 +339,27 @@ button {
   gap: 4px;
 }
 
+/* ヘッダーの丸いアイコンボタン（検索など。mockup/common.css .icon-btn） */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 17px;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--color-primary-soft);
+  text-decoration: none;
+}
+
 /* ===== アバターとドロップダウン ===== */
 .avatar {
   display: inline-flex;
@@ -1303,7 +1324,66 @@ button {
   font-weight: 800;
 }
 
-/* ===== ユーザー行（SC-08 / SC-09 共通） ===== */
+/* ===== SC-07 ユーザー検索 ===== */
+.search-field {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/*
+  ページ番号のページネーション（mockup/common.css .pagination）。
+  SC-07 だけがオフセット方式なので、この画面でしか使わない。
+  モックは <a> だが実装は <button> なので、セレクタを読み替えている。
+*/
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 20px;
+  flex-wrap: wrap;
+}
+
+.pagination button,
+.pagination .gap {
+  min-width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.pagination .gap {
+  border-color: transparent;
+  cursor: default;
+}
+
+.pagination button:hover:not(:disabled):not(.current) {
+  background: var(--color-primary-soft);
+}
+
+.pagination button.current {
+  background: var(--color-text);
+  color: #fff;
+  border-color: var(--color-text);
+  cursor: default;
+}
+
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== ユーザー行（SC-07 / SC-08 / SC-09 共通） ===== */
 .user-row {
   display: flex;
   align-items: flex-start;
