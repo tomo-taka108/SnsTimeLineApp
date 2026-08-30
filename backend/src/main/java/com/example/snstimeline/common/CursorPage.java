@@ -1,5 +1,6 @@
 package com.example.snstimeline.common;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 /**
@@ -11,7 +12,14 @@ import java.util.List;
  * <p><b>{@code nextCursor} が null でもキー自体を出す必要があるため、 このrecordに {@code @JsonInclude(NON_NULL)}
  * を付けてはいけない。</b>
  */
-public record CursorPage<T>(List<T> items, String nextCursor, boolean hasNext) {
+@Schema(description = "カーソルページネーションのレスポンス。タイムラインやコメント一覧など、新着が挿入され続ける一覧で使う")
+public record CursorPage<T>(
+    @Schema(description = "取得した要素") List<T> items,
+    @Schema(
+            description = "次ページを取得するためのカーソル。**最終ページでは null**。中身を解釈せず、そのまま次のリクエストに渡すこと",
+            nullable = true)
+        String nextCursor,
+    @Schema(description = "次ページが存在するか。false なら終端") boolean hasNext) {
 
   /**
    * 次ページがある場合。

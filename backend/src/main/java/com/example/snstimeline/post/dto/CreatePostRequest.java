@@ -3,6 +3,7 @@ package com.example.snstimeline.post.dto;
 import com.example.snstimeline.common.CodePointLength;
 import com.example.snstimeline.common.TrimDeserializer;
 import com.example.snstimeline.common.ValidationConstants;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -23,8 +24,11 @@ public record CreatePostRequest(
     @JsonDeserialize(using = TrimDeserializer.class)
         @NotBlank(message = "本文を入力してください")
         @CodePointLength(max = ValidationConstants.POST_BODY_MAX, message = "本文は280文字以内で入力してください")
+        // 独自制約 @CodePointLength は springdoc が自動認識しないため、上限をここで明示する
+        @Schema(description = "投稿の本文。280文字以内（絵文字は1文字と数える）", example = "はじめての投稿です")
         String body,
     @Size(max = ValidationConstants.POST_IMAGE_COUNT_MAX, message = "画像は1枚まで添付できます")
+        @Schema(description = "添付する画像のID。**先に画像アップロードAPIで取得したもの**を指定する。1枚まで")
         List<Long> imageFileIds) {
 
   /** {@code imageFileIds} が未送信（{@code null}）でも呼び出し側が空リストとして扱えるようにする。 */

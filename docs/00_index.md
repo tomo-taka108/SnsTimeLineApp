@@ -19,6 +19,7 @@ X/Twitter風SNSアプリ（学習目的）の要件定義ドキュメント一�
 | 08 | [08_glossary.md](08_glossary.md) | 用語集（日本語 / 英語 / DB名） | すべて | Fixed |
 | 09 | [09_decision_log.md](09_decision_log.md) | 設計判断ログ（なぜこうしたか） | すべて | Fixed |
 | 10 | [10_infrastructure.md](10_infrastructure.md) | インフラ構成（AWS想定）。**構築するかは未決** | インフラ担当 | **Draft** |
+| — | **[API仕様書（Swagger UI）](https://tomo-taka108.github.io/SnsTimeLineApp/api/)** | **実装から自動生成**したエンドポイント仕様。更新手順は [api/README.md](api/README.md) | すべての実装者 | 自動生成 |
 
 ---
 
@@ -51,6 +52,7 @@ X/Twitter風SNSアプリ（学習目的）の要件定義ドキュメント一�
 | テーブル構造はどうなっているか | [04_data_model.md](04_data_model.md) 1章・2章 |
 | **なぜこの設計にしたのか** | [09_decision_log.md](09_decision_log.md) |
 | APIの仕様 | [05_api_design.md](05_api_design.md) 3章・5章 |
+| **APIの正確なパス・型・必須項目** | **[API仕様書（Swagger UI）](https://tomo-taka108.github.io/SnsTimeLineApp/api/)**（実装と同期） |
 | 実装をどの順で進めるか | [07_architecture.md](07_architecture.md) 8章 |
 | セキュリティで気をつけること | [06_non_functional.md](06_non_functional.md) 3章 |
 | **ユーザー検索をどう実装するか** | [04_data_model.md](04_data_model.md) 6章、[05_api_design.md](05_api_design.md) #20 |

@@ -54,6 +54,7 @@ DBにも閲覧ログを持たない設計としており、[要件定義書](doc
 | 03 | [画面設計](docs/03_screen_design.md) | 画面一覧（12画面 + 3モーダル）・遷移図 |
 | 04 | [データモデル](docs/04_data_model.md) | ER図・テーブル定義（7テーブル）・インデックス・ユーザー検索設計 |
 | 05 | [API設計](docs/05_api_design.md) | エンドポイント一覧（26件）・共通仕様・シーケンス図 |
+| — | **[API仕様書（Swagger UI）](https://tomo-taka108.github.io/SnsTimeLineApp/api/)** | **実装から自動生成**したエンドポイント仕様。リクエスト／レスポンスの形を確認できる |
 | 06 | [非機能要件](docs/06_non_functional.md) | 性能・セキュリティ・保守性・テスト方針 |
 | 07 | [アーキテクチャ](docs/07_architecture.md) | レイヤー構成・ストレージ抽象化・実装順序 |
 | 08 | [用語集](docs/08_glossary.md) | 日本語 / 英語 / DB名の対応表 |

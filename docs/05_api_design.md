@@ -2,6 +2,13 @@
 
 本書は、[03_screen_design.md](03_screen_design.md)（何を取得したいか）と [04_data_model.md](04_data_model.md)（何を持っているか）を突き合わせて設計したREST APIを定義する。
 
+> **実装から自動生成したAPI仕様書（Swagger UI）を [https://tomo-taka108.github.io/SnsTimeLineApp/api/](https://tomo-taka108.github.io/SnsTimeLineApp/api/) で公開している。**
+>
+> 本書と役割が異なる（[D-53](09_decision_log.md#d-53-swagger-ui-と-05_api_designmd-を併存させる)）。
+> **Swagger UI は「APIが今どういう形か」**を実装から機械的に示す。
+> **本書は「なぜこの形にしたか」**——カーソル方式を選んだ理由、401と403の使い分け、シーケンス図——を説明する。
+> パスやフィールドの正確な形を知りたいときは Swagger UI を、設計の背景を知りたいときは本書を見ること。
+
 ---
 
 ## 1. 共通仕様

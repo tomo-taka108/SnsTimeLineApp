@@ -1,5 +1,6 @@
 package com.example.snstimeline.common;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 /**
@@ -13,7 +14,13 @@ import java.util.List;
  * <p><b>{@code totalPages} が 0 でもキー自体を出す必要があるため、このrecordに {@code @JsonInclude(NON_NULL)}
  * を付けてはいけない</b>（{@link CursorPage} と同じ）。
  */
-public record OffsetPage<T>(List<T> items, int page, int size, long totalElements, int totalPages) {
+@Schema(description = "オフセットページネーションのレスポンス。**ユーザー検索でのみ使う**（ページ番号を直接指定したいため）")
+public record OffsetPage<T>(
+    @Schema(description = "取得した要素") List<T> items,
+    @Schema(description = "現在のページ番号（0始まり）", example = "0") int page,
+    @Schema(description = "1ページあたりの件数", example = "20") int size,
+    @Schema(description = "検索条件に一致した総件数", example = "42") long totalElements,
+    @Schema(description = "総ページ数。一致0件なら0", example = "3") int totalPages) {
 
   /**
    * {@code totalPages} を件数から算出して組み立てる。

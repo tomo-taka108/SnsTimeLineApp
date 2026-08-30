@@ -4,6 +4,7 @@ import com.example.snstimeline.common.CodePointLength;
 import com.example.snstimeline.common.TrimDeserializer;
 import com.example.snstimeline.common.ValidationConstants;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -37,6 +38,9 @@ public record SignupRequest(
             min = ValidationConstants.DISPLAY_NAME_MIN,
             max = ValidationConstants.DISPLAY_NAME_MAX,
             message = "表示名は1〜50文字で入力してください")
+        // 独自制約 @CodePointLength は springdoc が自動認識しないため、
+        // 文字数の上限をここで明示する（絵文字などのサロゲートペアを1文字と数える）
+        @Schema(description = "画面に表示される名前。1〜50文字（絵文字は1文字と数える）", example = "山田太郎")
         String displayName,
     // パスワードはトリムしない（docs/09_decision_log.md D-27）。
     // @Size(min=8) を併記すると1フィールドに2件エラーが出るため @Pattern 1本にする。
