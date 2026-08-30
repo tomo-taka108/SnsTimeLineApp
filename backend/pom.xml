@@ -27,6 +27,11 @@
 		<spotless.version>3.10.0</spotless.version>
 		<google-java-format.version>1.36.1</google-java-format.version>
 		<aws-sdk.version>2.54.7</aws-sdk.version>
+		<!-- springdoc 3.x 系が Spring Boot 4 / Spring Framework 7 対応（2.x 系は Boot 3 向け）。
+		     3.1.0 は spring-boot-starter-parent 4.1.0 でビルドされており、本プロジェクトと同一。
+		     Jackson 3 前提の spring-boot-jackson に依存しているため、jjwt のような
+		     Jackson 2/3 の衝突（docs/09_decision_log.md D-26）は起きない -->
+		<springdoc-openapi.version>3.1.0</springdoc-openapi.version>
 	</properties>
 
 	<dependencyManagement>
@@ -100,6 +105,15 @@
 			<artifactId>jjwt-gson</artifactId>
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
+		</dependency>
+
+		<!-- ===== API仕様書（OpenAPI / Swagger UI） =====
+		     依存を追加するだけで /v3/api-docs（OpenAPI定義）と /swagger-ui.html が有効になる。
+		     SecurityConfig でこれらのパスを permitAll にしないと401になる点に注意 -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc-openapi.version}</version>
 		</dependency>
 
 		<!-- ===== AWS S3 =====

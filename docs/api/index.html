@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>SNS Timeline API 仕様書</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+<div id="swagger-ui"></div>
+
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+<script>
+  window.onload = () => {
+    window.ui = SwaggerUIBundle({
+      // 同じ docs/api/ 配下に置いた OpenAPI 定義を読む。
+      // この JSON は起動中のアプリの /v3/api-docs から取得したもので、
+      // 更新手順は同ディレクトリの README.md を参照（docs/09_decision_log.md D-52）
+      url: "./api-docs.json",
+      dom_id: "#swagger-ui",
+      deepLinking: true,
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: "StandaloneLayout",
+      // 公開版は閲覧専用。リクエスト先が localhost:8080 になり実行できないため、
+      // 「Try it out」を最初から出さない（ローカル起動時の /swagger-ui.html では使える）
+      supportedSubmitMethods: [],
+    });
+  };
+</script>
+</body>
+</html>

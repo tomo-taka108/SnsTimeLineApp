@@ -3,6 +3,7 @@ package com.example.snstimeline.post.dto;
 import com.example.snstimeline.common.CodePointLength;
 import com.example.snstimeline.common.TrimDeserializer;
 import com.example.snstimeline.common.ValidationConstants;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import tools.jackson.databind.annotation.JsonDeserialize;
 
@@ -18,4 +19,6 @@ public record UpdatePostRequest(
     @JsonDeserialize(using = TrimDeserializer.class)
         @NotBlank(message = "本文を入力してください")
         @CodePointLength(max = ValidationConstants.POST_BODY_MAX, message = "本文は280文字以内で入力してください")
+        // 独自制約 @CodePointLength は springdoc が自動認識しないため、上限をここで明示する
+        @Schema(description = "投稿の本文。280文字以内（絵文字は1文字と数える）", example = "本文を修正しました")
         String body) {}

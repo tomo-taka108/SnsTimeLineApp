@@ -76,6 +76,12 @@ public class SecurityConfig {
                     // アップロード（#25, POST）は認証必須のまま
                     .requestMatchers(HttpMethod.GET, "/api/v1/files/*")
                     .permitAll()
+                    // API仕様書（Swagger UI）は認証不要。仕様を読むためだけにログインを
+                    // 強制するのは本末転倒であり、そもそも仕様書はGitHub Pagesで公開している
+                    // （docs/api/）。/swagger-ui.html はリダイレクト前のパスなので、
+                    // /swagger-ui/** とは別に明記しないと拾えない
+                    .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                    .permitAll()
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

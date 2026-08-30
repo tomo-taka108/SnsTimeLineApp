@@ -3,6 +3,7 @@ package com.example.snstimeline.comment.dto;
 import com.example.snstimeline.common.CodePointLength;
 import com.example.snstimeline.common.TrimDeserializer;
 import com.example.snstimeline.common.ValidationConstants;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import tools.jackson.databind.annotation.JsonDeserialize;
 
@@ -20,4 +21,6 @@ public record UpdateCommentRequest(
         @CodePointLength(
             max = ValidationConstants.COMMENT_BODY_MAX,
             message = "コメントは280文字以内で入力してください")
+        // 独自制約 @CodePointLength は springdoc が自動認識しないため、上限をここで明示する
+        @Schema(description = "コメントの本文。280文字以内（絵文字は1文字と数える）", example = "コメントを修正しました")
         String body) {}

@@ -1168,6 +1168,64 @@ ORDER BY
 
 ---
 
+## D-52 springdoc-openapi でAPI仕様書を自動生成し、GitHub Pages で公開する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-30 |
+| **論点** | API仕様は [05_api_design.md](05_api_design.md) に手書きで管理していたが、実装変更時に更新を忘れるとズレる。実装と同期する仕様書をどう用意し、どう公開するか |
+| **選択肢** | A. 手書きのみを維持 / **B. springdoc-openapi で自動生成し、静的な Swagger UI を GitHub Pages で公開** / C. Bと同じ構成をGitHub Actionsで自動更新まで行う |
+| **決定** | **B**（Cは将来の課題として残す） |
+| **状態** | 決定済み |
+
+**採用バージョンは `springdoc-openapi-starter-webmvc-ui` 3.1.0。** 選定の経緯を残す。
+
+- **2.x系は使えない。** 2.x は Spring Boot 3 / Spring Framework 6 向けであり、本プロジェクトの Boot 4.1.0（Framework 7）とは噛み合わない。
+- **3.1.0 の親POMは `spring-boot-starter-parent` 4.1.0 でビルドされており、本プロジェクトと完全に一致する**（Maven Central の POM を直接確認した）。
+- **Jackson 3 の問題は起きなかった。** jjwt で `jjwt-jackson` が Jackson 3 非対応だった（[D-26](#d-26-jwtライブラリにjjwtを使いjjwt-gsonを選ぶ)）ため同種の衝突を懸念したが、springdoc 3.1.0 は Boot 4 の `spring-boot-jackson` に依存しており Jackson 3 前提だった。実際に起動して `/v3/api-docs` が 200 を返すことを確認済み。
+- **[D-25](#d-25-ormマッパーにmybatisを採用する) の教訓（公式の対応表ではなく Maven Central を直接見る）がそのまま当てはまった。**
+
+**Swagger UI 関連パスを `permitAll` にする。** `/v3/api-docs/**`・`/swagger-ui/**`・`/swagger-ui.html` を [SecurityConfig](../backend/src/main/java/com/example/snstimeline/config/SecurityConfig.java) に追加した。仕様を読むためだけにログインを強制するのは本末転倒であり、そもそも同じ内容を GitHub Pages で公開しているため秘匿する意味がない。`/swagger-ui.html` はリダイレクト前のパスなので、`/swagger-ui/**` とは別に明記しないと拾えない。
+
+**公開場所は `docs/api/` サブフォルダとする。** GitHub Pages は `main` ブランチの `/docs` から配信する設定にしたが、`docs/` 直下は設計書11本で埋まっている。`docs/index.html` を Swagger UI にすると設計書の索引と衝突するため、1階層下げた。公開URLは `https://tomo-taka108.github.io/SnsTimeLineApp/api/`。
+
+**`api-docs.json` は手動更新とする。** 起動中のアプリの `/v3/api-docs` から取得してコミットする（手順は [docs/api/README.md](api/README.md)）。**この方式は「API変更時に更新を忘れると仕様書が古くなる」という弱点を持つ。** それでも当面これを採るのは、まず手で一度やっておくとCIが何を自動化しているのかを理解でき、失敗時の切り分けができるようになるため。
+
+**将来の課題（選択肢C）**: GitHub Actions で main へのマージのたびに、PostgreSQL をサービスコンテナで起動 → アプリを起動 → `/v3/api-docs` を取得 → 差分があれば自動コミット、という自動化ができる。より軽量な案として、アプリを起動せずテスト内で `MockMvc` から `/v3/api-docs` を叩いて出力する方法もある（CIでDBを立てる必要がなくなる）。手動運用を一度経験してから着手する。
+
+**独自制約 `@CodePointLength` は springdoc が自動認識しない。** 標準の Bean Validation（`@NotBlank` / `@Size` / `@Pattern` / `@Email`）は自動でスキーマに反映されるが、独自アノテーションは対象外だった（生成されたJSONで確認）。該当する5フィールドにのみ `@Schema(description = ...)` で文字数上限を明記した。**標準アノテーションの側は二重に書かない**（保守対象が増えるだけのため）。
+
+**影響範囲**: [backend/pom.xml](../backend/pom.xml) / [SecurityConfig.java](../backend/src/main/java/com/example/snstimeline/config/SecurityConfig.java) / `OpenApiConfig.java`（新規） / 全Controller・共通DTO（アノテーション付与） / [docs/api/](api/) / [README.md](../README.md)
+
+---
+
+## D-53 Swagger UI と 05_api_design.md を併存させる
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-08-30 |
+| **論点** | [D-52](#d-52-springdoc-openapi-でapi仕様書を自動生成しgithub-pages-で公開する) で自動生成の仕様書ができたことで、手書きの [05_api_design.md](05_api_design.md) と内容が重複する。どちらを正とするか |
+| **選択肢** | **A. 両方を維持し、役割を分ける** / B. Swagger UI を正とし、05_api_design.md のエンドポイント詳細を削って概要のみに縮小する |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**役割分担**
+
+| | 役割 | 特性 |
+|---|---|---|
+| **Swagger UI**（自動生成） | 「APIが**今どういう形か**」 | 実装と機械的に同期する。パス・型・必須項目の一次情報源として信頼できる。ただし「なぜ」は書けない |
+| **[05_api_design.md](05_api_design.md)**（手書き） | 「**なぜこの形にしたか**」 | カーソルページネーションを選んだ理由（[D-06](#d-06-ページネーション方式)）、401と403の使い分け、シーケンス図、CORS設計など、コードに表現できない設計判断 |
+
+**理由**
+
+- **両者は競合せず補完関係にある。** 自動生成できるのは「形」だけで、「なぜその形なのか」はコードから復元できない。この判断の記録こそが学習目的の本プロジェクトで最も価値のある部分である。
+- **B案（05_api_design.md の縮小）は今は採らない。** エンドポイント一覧やリクエスト例は確かに重複するが、削ると「Swagger UIが見られない状況で仕様を追えない」状態になる。重複による更新コストは、現時点では許容できる範囲。
+- 実運用で乖離が問題になった時点で、B案への移行を新しいIDで再検討する。
+
+**影響範囲**: [05_api_design.md](05_api_design.md)（冒頭に導線を追記） / [00_index.md](00_index.md) / [docs/api/README.md](api/README.md)
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |
