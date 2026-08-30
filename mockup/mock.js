@@ -155,9 +155,9 @@ function buildPosts() {
 const POSTS = buildPosts();
 
 const COMMENTS = [
-  { id: 500, authorId: 3, body: 'いいですね！わたしもその公園よく行きます。', createdAt: hoursAgo(5), isMine: false },
-  { id: 501, authorId: 2, body: '天気がいいと歩くだけで気持ちいいですよね。', createdAt: hoursAgo(4), isMine: false },
-  { id: 502, authorId: 1, body: 'ありがとうございます。またゆっくり行ってみます。', createdAt: hoursAgo(2), isMine: true },
+  { id: 500, authorId: 3, body: 'いいですね！わたしもその公園よく行きます。', createdAt: hoursAgo(5), editedAt: null, isMine: false },
+  { id: 501, authorId: 2, body: '天気がいいと歩くだけで気持ちいいですよね。', createdAt: hoursAgo(4), editedAt: null, isMine: false },
+  { id: 502, authorId: 1, body: 'ありがとうございます。またゆっくり行ってみます。', createdAt: hoursAgo(2), editedAt: hoursAgo(1), isMine: true },
 ];
 
 function hoursAgo(h) {
@@ -281,13 +281,15 @@ function userRowHtml(user) {
   </div>`;
 }
 
-/** コメント1件（SC-04） */
+/** コメント1件（SC-04）。F-CM-03 のインライン編集フォームも合わせて仕込む（D-51） */
 function commentHtml(c) {
   const author = getUser(c.authorId);
+  const edited = c.editedAt ? ' <span class="edited">・編集済み</span>' : '';
   const menu = c.isMine
     ? `<div class="more-menu">
          <button class="more-btn" type="button" data-more aria-label="メニュー">⋯</button>
          <div class="dropdown" data-more-menu>
+           <button type="button" data-edit-comment>✏️ 編集</button>
            <button type="button" data-open-modal="modal-delete" data-delete-target="comment">🗑 削除</button>
          </div>
        </div>`
@@ -301,11 +303,19 @@ function commentHtml(c) {
         <a class="name" href="profile.html">${escapeHtml(author.displayName)}</a>
         <span class="handle">@${escapeHtml(author.username)}</span>
         <span class="handle">·</span>
-        <span class="time">${formatRelative(c.createdAt)}</span>
+        <span class="time" data-comment-time>${formatRelative(c.createdAt)}</span><span data-comment-edited>${edited}</span>
         <span class="spacer"></span>
         ${menu}
       </div>
-      <p class="comment-text">${escapeHtml(c.body)}</p>
+      <p class="comment-text" data-comment-text>${escapeHtml(c.body)}</p>
+      <div class="comment-edit" hidden>
+        <textarea class="textarea" rows="2" data-edit-textarea>${escapeHtml(c.body)}</textarea>
+        <div class="comment-form-foot">
+          <span class="char-counter" data-edit-counter>0/280</span>
+          <button class="btn btn-outline btn-sm" type="button" data-cancel-edit>キャンセル</button>
+          <button class="btn btn-accent btn-sm" type="button" data-save-edit>保存</button>
+        </div>
+      </div>
     </div>
   </div>`;
 }
@@ -481,5 +491,58 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.closest('[data-stop], [data-more], [data-more-menu], .more-menu')) return;
     const card = e.target.closest('[data-href]');
     if (card) location.href = card.dataset.href;
+  });
+
+  /* --- F-CM-03 コメント編集（インライン。docs/09_decision_log.md D-51） ---
+     本文 <p> を隠し .comment-edit を表示する。モーダルは使わない。 */
+  document.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('[data-edit-comment]');
+    if (editBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.querySelectorAll('[data-more-menu].is-open').forEach((m) => m.classList.remove('is-open'));
+
+      const item = editBtn.closest('.comment-item');
+      const text = item.querySelector('[data-comment-text]');
+      const editForm = item.querySelector('.comment-edit');
+      const textarea = editForm.querySelector('[data-edit-textarea]');
+      const counter = editForm.querySelector('[data-edit-counter]');
+      const saveBtn = editForm.querySelector('[data-save-edit]');
+
+      text.hidden = true;
+      editForm.hidden = false;
+      textarea.value = text.textContent;
+      bindCharCounter(textarea, counter, saveBtn, 280);
+      textarea.focus();
+      return;
+    }
+
+    const cancelBtn = e.target.closest('[data-cancel-edit]');
+    if (cancelBtn) {
+      e.preventDefault();
+      const item = cancelBtn.closest('.comment-item');
+      item.querySelector('[data-comment-text]').hidden = false;
+      item.querySelector('.comment-edit').hidden = true;
+      return;
+    }
+
+    const saveBtn = e.target.closest('[data-save-edit]');
+    if (saveBtn) {
+      e.preventDefault();
+      const item = saveBtn.closest('.comment-item');
+      const textarea = item.querySelector('[data-edit-textarea]');
+      const body = textarea.value.trim();
+      if (!body || [...textarea.value].length > 280) return;
+
+      const text = item.querySelector('[data-comment-text]');
+      text.textContent = body;
+      text.hidden = false;
+      item.querySelector('.comment-edit').hidden = true;
+
+      const editedEl = item.querySelector('[data-comment-edited]');
+      if (editedEl) editedEl.innerHTML = ' <span class="edited">・編集済み</span>';
+
+      showToast('コメントを編集しました');
+    }
   });
 });

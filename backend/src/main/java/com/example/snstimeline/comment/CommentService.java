@@ -4,6 +4,7 @@ import com.example.snstimeline.comment.dto.CommentSummary;
 import com.example.snstimeline.comment.dto.CreateCommentRequest;
 import com.example.snstimeline.comment.dto.CreateCommentResponse;
 import com.example.snstimeline.comment.dto.DeleteCommentResponse;
+import com.example.snstimeline.comment.dto.UpdateCommentRequest;
 import com.example.snstimeline.common.ApiException;
 import com.example.snstimeline.common.CursorCodec;
 import com.example.snstimeline.common.CursorPage;
@@ -99,6 +100,29 @@ public class CommentService {
     postMapper.decrementCommentCount(comment.postId());
     int commentCount = postMapper.findCommentCount(comment.postId());
     return new DeleteCommentResponse(commentCount);
+  }
+
+  /**
+   * #12 コメント編集（F-CM-03、docs/09_decision_log.md D-51 によりMVPへ前倒し）。
+   *
+   * <p>認可は「① 存在チェック→404 → ② 所有者チェック→403」の順を必ず守る（D-14）。 comment_count は変わらないため触らない（D-01 の影響範囲に #12
+   * は含まれない）。
+   */
+  @Transactional
+  public CommentSummary update(Long meId, Long commentId, UpdateCommentRequest request) {
+    Comment comment = commentMapper.findById(commentId).orElseThrow(NotFoundException::new);
+    if (!comment.userId().equals(meId)) {
+      throw new ForbiddenException();
+    }
+
+    int affected = commentMapper.updateBody(commentId, request.body());
+    if (affected == 0) {
+      // ①②の判定後、更新までの間に既に削除された競合
+      throw new NotFoundException();
+    }
+
+    CommentRow row = commentMapper.findRowById(commentId).orElseThrow(NotFoundException::new);
+    return CommentSummary.from(row, meId);
   }
 
   private static int clampLimit(Integer limitParam) {

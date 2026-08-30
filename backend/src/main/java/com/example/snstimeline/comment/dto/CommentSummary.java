@@ -8,7 +8,7 @@ import java.time.OffsetDateTime;
 /**
  * コメント（docs/05_api_design.md 4章 Comment）。
  *
- * <p>{@code editedAt} はコメント編集（F-CM-03）がPhase2のため今回は常に {@code null}。
+ * <p>{@code editedAt} はコメント編集（F-CM-03、docs/09_decision_log.md D-51）で本文を編集すると現在時刻が入る。
  *
  * <p>{@code isMine} は {@code @JsonProperty} を明示する。{@code PostSummary.isLikedByMe} と同じ理由 （record +
  * boolean アクセサの組み合わせがJacksonのバージョンによって揺れうるため）。

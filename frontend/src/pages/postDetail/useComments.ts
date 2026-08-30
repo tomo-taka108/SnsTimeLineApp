@@ -66,6 +66,10 @@ export function useComments(postId: number) {
     setComments((prev) => prev.filter((c) => c.id !== commentId));
   }
 
+  function replaceComment(comment: Comment) {
+    setComments((prev) => prev.map((c) => (c.id === comment.id ? comment : c)));
+  }
+
   return {
     comments,
     status,
@@ -75,5 +79,6 @@ export function useComments(postId: number) {
     loadMore,
     appendComment,
     removeComment,
+    replaceComment,
   };
 }

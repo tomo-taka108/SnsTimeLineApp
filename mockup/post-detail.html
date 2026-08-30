@@ -158,7 +158,7 @@
     const body = ta.value.trim();
     if (!body) return;
 
-    const c = { id: 900, authorId: 1, body: body, createdAt: new Date().toISOString(), isMine: true };
+    const c = { id: 900, authorId: 1, body: body, createdAt: new Date().toISOString(), editedAt: null, isMine: true };
     document.getElementById('comment-list').insertAdjacentHTML('beforeend', commentHtml(c));
 
     ta.value = '';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/ApiError";
-import { createComment, deleteComment } from "../api/comments";
+import { createComment, deleteComment, updateComment } from "../api/comments";
 import { deletePost, fetchPost, updatePost } from "../api/posts";
 import type { Comment, PostSummary } from "../api/types";
 import { AppHeader } from "../components/AppHeader";
@@ -65,6 +65,7 @@ export function PostDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteCommentTarget, setDeleteCommentTarget] = useState<Comment | null>(null);
   const [isCommentDeleting, setIsCommentDeleting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
 
   const numericId = Number(postId);
 
@@ -77,6 +78,7 @@ export function PostDetailPage() {
     loadMore: loadMoreComments,
     appendComment,
     removeComment,
+    replaceComment,
   } = useComments(numericId);
   const commentSentinelRef = useInfiniteScroll(
     () => void loadMoreComments(),
@@ -149,6 +151,18 @@ export function PostDetailPage() {
     } catch {
       showToast("通信に失敗しました。時間をおいて再度お試しください", true);
       throw new Error("comment create failed");
+    }
+  }
+
+  async function handleCommentUpdate(commentId: number, body: string) {
+    try {
+      const updated = await updateComment(commentId, { body });
+      replaceComment(updated);
+      setEditingCommentId(null);
+      showToast("コメントを編集しました");
+    } catch {
+      showToast("通信に失敗しました。時間をおいて再度お試しください", true);
+      throw new Error("comment update failed");
     }
   }
 
@@ -274,7 +288,15 @@ export function PostDetailPage() {
 
             {commentsStatus === "ready" &&
               comments.map((comment) => (
-                <CommentItem key={comment.id} comment={comment} onDelete={setDeleteCommentTarget} />
+                <CommentItem
+                  key={comment.id}
+                  comment={comment}
+                  isEditing={editingCommentId === comment.id}
+                  onEditStart={(c) => setEditingCommentId(c.id)}
+                  onEditSubmit={(body) => handleCommentUpdate(comment.id, body)}
+                  onEditCancel={() => setEditingCommentId(null)}
+                  onDelete={setDeleteCommentTarget}
+                />
               ))}
 
             {commentsStatus === "ready" && comments.length > 0 && (

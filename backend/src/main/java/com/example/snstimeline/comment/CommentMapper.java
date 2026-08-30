@@ -42,4 +42,11 @@ public interface CommentMapper {
    * 必要があるため（docs/09_decision_log.md D-14）。
    */
   int softDelete(@Param("id") Long id);
+
+  /**
+   * #12 コメント編集（docs/09_decision_log.md D-51）。
+   *
+   * <p>WHERE に user_id を含めない。理由は {@link #softDelete} と同じ（D-14）。
+   */
+  int updateBody(@Param("id") Long id, @Param("body") String body);
 }

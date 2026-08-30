@@ -79,4 +79,16 @@
       AND deleted_at IS NULL
   </update>
 
+  <!--
+    #12 コメント編集（docs/09_decision_log.md D-51）。
+    edited_at と updated_at の両方を更新する。updated_at はカウンタ更新でも変わるため
+    「編集済み」判定には使えない（docs/04_data_model.md 2.3、PostMapper.xml updateBody と同じ）。
+  -->
+  <update id="updateBody">
+    UPDATE comments
+    SET body = #{body}, edited_at = now(), updated_at = now()
+    WHERE id = #{id}
+      AND deleted_at IS NULL
+  </update>
+
 </mapper>

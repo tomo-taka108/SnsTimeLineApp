@@ -3,19 +3,25 @@ import { Link } from "react-router-dom";
 import type { Comment } from "../api/types";
 import { formatRelative } from "../utils/datetime";
 import { Avatar } from "./Avatar";
+import { CommentForm } from "./CommentForm";
 
 type Props = {
   comment: Comment;
+  isEditing: boolean;
+  onEditStart: (comment: Comment) => void;
+  onEditSubmit: (body: string) => Promise<void>;
+  onEditCancel: () => void;
   onDelete: (comment: Comment) => void;
 };
 
 /**
  * コメント1件（SC-04、mockup/mock.js commentHtml）。
  *
- * [⋯] メニューは自分のコメントのみ、削除ボタンのみ（編集はPhase2のため無し）。
+ * [⋯] メニューは自分のコメントのみ。編集（F-CM-03、D-51 でMVPへ前倒し）と削除の2項目。
  * 外側クリック＋Escapeで閉じるパターンは PostCard.tsx と同じ（D-35、2箇所目は重複を許容）。
+ * 編集中は本文の代わりに CommentForm をインライン表示する（モーダルは使わない）。
  */
-export function CommentItem({ comment, onDelete }: Props) {
+export function CommentItem({ comment, isEditing, onEditStart, onEditSubmit, onEditCancel, onDelete }: Props) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -52,8 +58,9 @@ export function CommentItem({ comment, onDelete }: Props) {
           <span className="handle">@{comment.author.username}</span>
           <span className="handle">・</span>
           <span className="time">{formatRelative(comment.createdAt)}</span>
+          {comment.editedAt && <span className="edited">・編集済み</span>}
           <span className="spacer" />
-          {comment.isMine && (
+          {comment.isMine && !isEditing && (
             <div className="more-menu" ref={menuRef}>
               <button
                 className="more-btn"
@@ -71,6 +78,16 @@ export function CommentItem({ comment, onDelete }: Props) {
                   role="menuitem"
                   onClick={() => {
                     setIsMenuOpen(false);
+                    onEditStart(comment);
+                  }}
+                >
+                  <span aria-hidden="true">✏️</span> 編集
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMenuOpen(false);
                     onDelete(comment);
                   }}
                 >
@@ -80,7 +97,17 @@ export function CommentItem({ comment, onDelete }: Props) {
             </div>
           )}
         </div>
-        <p className="comment-text">{comment.body}</p>
+        {isEditing ? (
+          <CommentForm
+            initialBody={comment.body}
+            submitLabel="保存"
+            onSubmit={onEditSubmit}
+            onCancel={onEditCancel}
+            autoFocus
+          />
+        ) : (
+          <p className="comment-text">{comment.body}</p>
+        )}
       </div>
     </div>
   );
