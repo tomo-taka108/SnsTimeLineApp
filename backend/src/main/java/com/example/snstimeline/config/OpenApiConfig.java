@@ -11,6 +11,8 @@ import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import java.util.List;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -54,8 +56,14 @@ public class OpenApiConfig {
 
                     本書は「APIが今どういう形か」を実装から自動生成したもの。
                     「なぜこの形にしたか」（カーソルページネーションを選んだ理由、
-                    401と403の使い分けなど）は `docs/05_api_design.md` に記載している。
+                    401と403の使い分けなど）は
+                    [API設計書](https://github.com/tomo-taka108/SnsTimeLineApp/blob/main/docs/05_api_design.md)
+                    に記載している。
                     """))
+        // サーバーURLを固定する。指定しないと springdoc が「JSONを生成したときの
+        // 実際のポート」を書き込むため、別ポートで起動して api-docs.json を作ると
+        // その値が公開版に焼き付いてしまう（docs/api/README.md の更新手順を参照）
+        .servers(List.of(new Server().url("http://localhost:8080").description("ローカル開発環境")))
         // 全エンドポイントに既定で Bearer 認証を要求する。認証不要な
         // signup/login/refresh/ファイル取得は、各メソッド側で @SecurityRequirements を
         // 空指定して打ち消している
