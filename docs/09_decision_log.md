@@ -1226,6 +1226,87 @@ ORDER BY
 
 ---
 
+## D-54 テスト用DBに H2 ではなく Testcontainers（postgres:16）を使う
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-02 |
+| **論点** | テストで開発用DB `snstimeline` を破壊しないために、テスト専用のDBをどう用意するか。当初は「H2などのインメモリDBを一時的に立てる」方針で検討した |
+| **選択肢** | **A. Testcontainers で本番と同じ postgres:16 を起動する** / B. H2（PostgreSQL互換モード）を使う / C. ローカルのPostgreSQLに `sns_test` データベースを別途作る |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**理由**
+
+**B（H2）は検討の結果、そもそも成立しないことが判明した。** マイグレーションとマッパーXMLが PostgreSQL 固有機能に依存しており、H2 では以下が実行できない。
+
+| 箇所 | ファイル | H2で失敗する理由 |
+|---|---|---|
+| `CREATE EXTENSION IF NOT EXISTS pg_trgm` | V10 | 該当機能なし。**ここでマイグレーションが停止し、テストが1本も起動しない** |
+| `CREATE INDEX ... WHERE deleted_at IS NULL` | V3 / V5 / V9 | 部分インデックス非対応 |
+| `ON users (lower(username) text_pattern_ops)` | V9 | 式インデックス＋演算子クラス非対応 |
+| `USING gin (username gin_trgm_ops)` | V10 | GINインデックス非対応 |
+| `CHECK (username ~ '^[a-zA-Z0-9_]+$')` | V1 | POSIX正規表現演算子 `~` 非対応 |
+| `COMMENT ON INDEX` | V10 | 非対応（`COMMENT ON TABLE / COLUMN` は可） |
+| `similarity(username, ...)` | [UserMapper.xml](../backend/src/main/resources/mapper/UserMapper.xml) | pg_trgm の関数。ユーザー検索が実行時エラーになる |
+| `(p.created_at, p.id) < (?, ?)` | [PostMapper.xml](../backend/src/main/resources/mapper/PostMapper.xml) 他 | 行値比較。カーソルページングの中核（[D-06](#d-06-ページネーション方式)） |
+| `INSERT ... RETURNING id` | User / Post / Comment / File Mapper | `<select>` として宣言している（[D-25](#d-25-orマッパーにmybatisを採用する)） |
+
+- **H2用に別スキーマを用意する案は採らない。** 本番と異なるスキーマをテストすることになり、統合テストの意味が失われる。「テストは緑なのに開発環境で落ちる」を招く。
+- **C（ローカルの別DB）はテスト用DBの状態管理を自前で行うことになる。** 前回のテストデータが残った状態で次を走らせる事故が起きうるうえ、将来CIを入れるときに再現性が落ちる。
+- **A は開発用DBを一切汚さない。** コンテナはテスト終了時に破棄されるため、当初の懸念（本番想定の振る舞いがおかしくなる）は完全に回避できる。`docker-compose.yml` で既に Docker を使っているため追加コストもない。
+
+**副次的な利点**: `similarity()` や部分インデックスといった「H2では書けなかったSQL」を、テストで実際に検証できる。
+
+**代償**: テスト実行に Docker の起動が必要になる。コンテナは `static` で共有し、Spring のコンテキストキャッシュを効かせることで起動は実質1回（実測で全体30秒程度）に抑える。
+
+**影響範囲**: [backend/pom.xml](../backend/pom.xml) / `backend/src/test/java/com/example/snstimeline/support/AbstractIntegrationTest.java` / [.claude/skills/quality-check/SKILL.md](../.claude/skills/quality-check/SKILL.md)
+
+> **Testcontainers 2.x は 1.x と互換性が無い。** Spring Boot 4.1.0 が管理するのは 2.0.5 で、artifactId は `postgresql` ではなく `testcontainers-postgresql`、パッケージは `org.testcontainers.postgresql`、さらに self-type のジェネリクス（`PostgreSQLContainer<?>`）が廃止されている。Web上のサンプルはほぼ 1.x なので、そのまま流用すると必ず失敗する。
+
+---
+
+## D-55 Controller テストの認証に `@WithMockUser` を使わない
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-02 |
+| **論点** | MockMvc でのコントローラテストで、認証済みユーザーをどう用意するか |
+| **選択肢** | **A. `SecurityMockMvcRequestPostProcessors.authentication(...)` で `AuthPrincipal` を直接載せる** / B. `@WithMockUser` を使う / C. 実JWTを発行して `Authorization` ヘッダに付ける |
+| **決定** | **A**（ただしJWTフィルタ自体の検証には C を併用する） |
+| **状態** | 決定済み |
+
+**理由**
+
+- **B は使えない。** `@WithMockUser` が SecurityContext に入れるのは `UserDetails` か `String` だが、本プロジェクトのコントローラは `@AuthenticationPrincipal AuthPrincipal` を受け取る。`AuthPrincipal` は **`UserDetails` を意図的に実装していない**（ステートレスJWTでDBを引かないため、[AuthPrincipal.java](../backend/src/main/java/com/example/snstimeline/auth/AuthPrincipal.java) の Javadoc 参照）。結果、引数に `null` が注入され `principal.userId()` が NPE を起こし、**認可エラーではなく 500** になる。落ちた理由が分かりにくい。
+- **A は本番と同じ Authentication を組む。** `JwtAuthenticationFilter` が組み立てるものと同一（principal は `AuthPrincipal`、credentials は `null`、権限は空リスト＝管理者ロールなし [D-14](#d-14-管理者ロールを設けるか)）。
+- **C は時間依存が入る。** アクセストークンの有効期限15分がテストに紛れ込み、失敗時に「JWT生成が悪いのか認可が悪いのか」の切り分けが増える。ただし `JwtAuthenticationFilter` 自体（不正な署名・期限切れを401にできるか）の検証には実JWTが必要なため、そこだけ C を使う。
+
+**影響範囲**: `backend/src/test/java/com/example/snstimeline/support/TestAuth.java`
+
+---
+
+## D-56 統合テストは原則ロールバックするが、`REQUIRES_NEW` の検証だけ例外にする
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-02 |
+| **論点** | 統合テストのデータ分離方法。テスト間でデータが残ると結果が不安定になる |
+| **選択肢** | **A. 原則 `@Transactional` ロールバック、例外的に TRUNCATE** / B. 全テストで TRUNCATE する / C. テストごとにDBを作り直す |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**理由**
+
+- **A が最も速い。** ロールバックはDBへの書き込みを確定させないため、TRUNCATE より軽い。
+- **ただし [RefreshTokenRevoker](../backend/src/main/java/com/example/snstimeline/auth/RefreshTokenRevoker.java) はロールバックでは検証できない。** 盗用検知の失効は `@Transactional(propagation = REQUIRES_NEW)` で独立したトランザクションをコミットする（例外を投げても失効を残すための設計）。テスト側がロールバック方式だと、内側の新トランザクションから親の未コミット行が見えず、**失効のUPDATEが0件になってテストが偽陰性で通る**。この1クラスだけ非トランザクションにし、`@Sql` で `truncate-all.sql` を流す。
+- **`created_at` の制御にも注意が必要。** `posts.created_at` は `DEFAULT now()` で、PostgreSQL の `now()` は**トランザクション開始時刻**を返すため、同一トランザクション内で連続INSERTすると全件同じ値になる。カーソルのタイブレーカー検証（D-33）には値を明示指定するヘルパーを使う。
+- **B は全テストが遅くなる。** C は現実的でない（マイグレーションが毎回走る）。
+
+**影響範囲**: `backend/src/test/resources/sql/truncate-all.sql` / `backend/src/test/java/com/example/snstimeline/support/TestFixtures.java`
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |
