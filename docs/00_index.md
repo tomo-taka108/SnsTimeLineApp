@@ -19,6 +19,7 @@ X/Twitter風SNSアプリ（学習目的）の要件定義ドキュメント一�
 | 08 | [08_glossary.md](08_glossary.md) | 用語集（日本語 / 英語 / DB名） | すべて | Fixed |
 | 09 | [09_decision_log.md](09_decision_log.md) | 設計判断ログ（なぜこうしたか） | すべて | Fixed |
 | 10 | [10_infrastructure.md](10_infrastructure.md) | インフラ構成（AWS想定）。**構築するかは未決** | インフラ担当 | **Draft** |
+| 11 | [11_test_design.md](11_test_design.md) | テストケース表（同値分割・境界値・デシジョンテーブル） | すべての実装者 | 作成中 |
 | — | **[API仕様書（Swagger UI）](https://tomo-taka108.github.io/SnsTimeLineApp/api/)** | **実装から自動生成**したエンドポイント仕様。更新手順は [api/README.md](api/README.md) | すべての実装者 | 自動生成 |
 
 ---
@@ -57,6 +58,7 @@ X/Twitter風SNSアプリ（学習目的）の要件定義ドキュメント一�
 | セキュリティで気をつけること | [06_non_functional.md](06_non_functional.md) 3章 |
 | **ユーザー検索をどう実装するか** | [04_data_model.md](04_data_model.md) 6章、[05_api_design.md](05_api_design.md) #20 |
 | **AWSに載せるとどうなるか** | [10_infrastructure.md](10_infrastructure.md) |
+| **どんなテストを書くべきか** | [11_test_design.md](11_test_design.md)、[06_non_functional.md](06_non_functional.md) 5.3 |
 
 ---
 
@@ -107,6 +109,7 @@ flowchart TD
 | 設計判断の理由 | [09_decision_log.md](09_decision_log.md) | 04, 05, 06, 07, 10 |
 | ユーザー検索の方式・SQL・インデックス | [04_data_model.md](04_data_model.md) 6章 | 03, 05 |
 | AWS構成・インフラ | [10_infrastructure.md](10_infrastructure.md) | 07 |
+| テストケースの設計 | [11_test_design.md](11_test_design.md) | 04, 05, 06 |
 
 > **DBのカラムとAPIのフィールドは1対1ではない。** 例えば `isLikedByMe` はAPIにあるがDBにはなく、`password_hash` はDBにあるがAPIには出ない。両者を混同しないこと。
 
