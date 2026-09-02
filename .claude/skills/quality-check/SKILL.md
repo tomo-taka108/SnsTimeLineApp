@@ -10,9 +10,11 @@ disable-model-invocation: false
 それぞれチェックが必要。
 
 > **`backend/`（Spring Boot 4.1.0 / JDK 25 / Maven）と `frontend/`（React 19 / Vite 8 / TypeScript）は実装済み。**
-> Step 1〜2 と Step 4〜5 のコマンドはそのまま動く。
+> すべてのコマンドがそのまま動く。
 >
-> **Step 3（JUnit）は現時点でテストコードが無いため、実行しても何も走らない。** テストを書いた時点でこの注記を消すこと。
+> **Step 3（JUnit）は Docker Desktop の起動が必要。** 実DBを使うテストは Testcontainers で
+> `postgres:16` を起動する（[docs/09_decision_log.md](../../../docs/09_decision_log.md) D-54）。
+> Docker が動いていないと `Could not find a valid Docker environment` で失敗する。
 
 ---
 
@@ -53,7 +55,10 @@ cd backend && ./mvnw test
 ```
 
 - **すべて PASS** が目標
-- テストは **Testcontainers またはテスト専用DB** を使い、開発用DB `snstimeline` を破壊しないこと
+- **事前に Docker Desktop を起動しておくこと。** 実DBを使うテストは Testcontainers で
+  `postgres:16` を起動する。コンテナはテスト終了時に破棄されるため、開発用DB `snstimeline` は汚れない
+- テストクラスの命名は **`*Test` に統一**する。`*IT` にすると Failsafe 管轄になり `./mvnw test` で走らない
+- 実DBを使うテストは `AbstractIntegrationTest` を継承する（コンテナ・JWT設定・保存先の供給を担う）
 
 **必ず書くべきテスト**（[docs/06_non_functional.md](../../../docs/06_non_functional.md) 5.3）:
 
