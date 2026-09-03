@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>テストの考え方 — 5段階の階層と、技法の使い分け</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --surface-2: #fafbfc; --ink: #1b2130;
+    --ink-soft: #4b5464; --ink-faint: #858da0; --line: #e3e6ec;
+    --accent: #2f5bd6; --accent-soft: #e7edfc; --accent-ink: #1a2e63;
+    --exist: #6d7688; --exist-soft: #eceef2;
+    --net: #0f9b8e; --net-soft: #e2f4f1;
+    --warn: #c56636; --warn-soft: #fbeee5;
+    --danger: #c0392b; --danger-soft: #fbeaea;
+    --radius: 14px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10131a; --surface: #191d26; --surface-2: #151922; --ink: #e9ebf1;
+      --ink-soft: #b3bbcb; --ink-faint: #7c8598; --line: #2a3040;
+      --accent: #7099f5; --accent-soft: #22304f; --accent-ink: #d9e4ff;
+      --exist: #8a93a5; --exist-soft: #242a36;
+      --net: #52c9bc; --net-soft: #153230;
+      --warn: #e0895e; --warn-soft: #2f2016;
+      --danger: #e8776a; --danger-soft: #331d1b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10131a; --surface: #191d26; --surface-2: #151922; --ink: #e9ebf1;
+    --ink-soft: #b3bbcb; --ink-faint: #7c8598; --line: #2a3040;
+    --accent: #7099f5; --accent-soft: #22304f; --accent-ink: #d9e4ff;
+    --exist: #8a93a5; --exist-soft: #242a36; --net: #52c9bc; --net-soft: #153230;
+    --warn: #e0895e; --warn-soft: #2f2016;
+    --danger: #e8776a; --danger-soft: #331d1b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font); line-height: 1.75; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 44px 22px 80px; }
+
+  .themebtn { position: fixed; top: 14px; right: 14px; z-index: 10; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); border-radius: 20px; padding: 6px 14px; font: 600 13px var(--font); cursor: pointer; }
+  .themebtn:hover { color: var(--ink); }
+  .themebtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 0 0 8px; }
+  h1 { font-size: clamp(25px, 4.5vw, 36px); line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; text-wrap: balance; }
+  header .lede { color: var(--ink-soft); font-size: 16px; margin: 0; }
+
+  h2 { font-size: 21px; margin: 52px 0 4px; letter-spacing: -.01em; scroll-margin-top: 20px; }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  .h2sub { color: var(--ink-faint); font-size: 14px; margin: 0 0 20px; }
+  h3.plain { font-size: 16px; margin: 26px 0 0; }
+
+  .toc { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-top: 28px; }
+  .toc ol { margin: 0; padding-left: 20px; color: var(--ink-soft); font-size: 14.5px; }
+  .toc li { margin: 3px 0; }
+  .toc a { color: var(--ink-soft); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+
+  p.body { color: var(--ink-soft); font-size: 15px; margin: 14px 0 0; }
+  p.body b { color: var(--ink); }
+
+  code { font-family: var(--mono); font-size: .88em; background: var(--exist-soft); padding: 1px 6px; border-radius: 5px; }
+  pre { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 13px 15px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--ink-soft); margin: 12px 0 0; }
+  pre b { color: var(--ink); font-weight: 700; }
+  pre .pmark { color: var(--accent); font-weight: 700; }
+  pre .ok { color: var(--net); font-weight: 700; }
+  pre .ng { color: var(--danger); font-weight: 700; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; margin-top: 14px; }
+  .card h3 { margin: 0 0 4px; font-size: 17px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .card .role { font-size: 12.5px; color: var(--ink-faint); font-weight: 600; margin: 0; }
+  .card p { margin: 8px 0 0; color: var(--ink-soft); font-size: 14.5px; }
+  .card .analogy { margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 13.5px; color: var(--ink-soft); }
+  .card .analogy b { color: var(--ink); }
+
+  .tag { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+  .tag-core { background: var(--accent-soft); color: var(--accent-ink); }
+  .tag-sub { background: var(--exist-soft); color: var(--exist); }
+  .tag-done { background: var(--net-soft); color: var(--net); }
+  .tag-todo { background: var(--warn-soft); color: var(--warn); }
+
+  .note { display: flex; gap: 11px; align-items: flex-start; background: var(--warn-soft); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 13px 15px; margin-top: 16px; font-size: 14px; color: var(--ink-soft); }
+  .note b { color: var(--ink); }
+  .note.key { background: var(--accent-soft); border-left-color: var(--accent); }
+  .note.key b { color: var(--accent-ink); }
+
+  .tscroll { overflow-x: auto; margin-top: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--surface-2); font-size: 13px; color: var(--ink-faint); font-weight: 700; white-space: nowrap; }
+  td { color: var(--ink-soft); }
+  td b, th b { color: var(--ink); }
+  td.ok { color: var(--net); font-weight: 700; }
+  td.ng { color: var(--danger); font-weight: 700; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+  .col { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+  .col h4 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .col ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 14px; }
+  .col li { margin-bottom: 7px; }
+  .col p { margin: 0 0 8px; color: var(--ink-soft); font-size: 14px; }
+
+  /* テストの5段階ピラミッド */
+  .pyramid { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .tier { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; background: var(--surface); display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+  .tier .name { font-weight: 700; font-size: 15px; }
+  .tier .meta { font-size: 12.5px; color: var(--ink-faint); margin-top: 2px; }
+  .tier .badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .t5 { width: 62%; } .t4 { width: 72%; } .t3 { width: 82%; } .t2 { width: 92%; } .t1 { width: 100%; }
+  @media (max-width: 640px) { .t5, .t4, .t3, .t2, .t1 { width: 100%; } }
+  .axis { display: flex; justify-content: space-between; width: 100%; font-size: 12px; color: var(--ink-faint); margin-top: 8px; }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 13px; }
+  footer a { color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<button class="themebtn" id="themebtn">🌓 テーマ切替</button>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">SnsTimeLineApp · 学習メモ</p>
+  <h1>テストの考え方 — 5段階の階層と、技法の使い分け</h1>
+  <p class="lede">「どんなテストを、どの順で、何を使って書くのか」。テストを1本も書いたことがない状態から、実際に63本書くまでに理解したことを整理します。テスト実装の準備〜Stage 1（2026-09-01〜09-02）時点の内容です。</p>
+</header>
+
+<div class="toc">
+  <ol>
+    <li><a href="#s1">そもそもテストとは何をするものか</a></li>
+    <li><a href="#s2">テストの5段階（階層イメージ）</a></li>
+    <li><a href="#s3">層によって「道具」が変わる理由</a></li>
+    <li><a href="#s4">ブラックボックス と ホワイトボックス</a></li>
+    <li><a href="#s5">ケースの作り方（3つの技法）</a></li>
+    <li><a href="#s6">テスト用DB — Testcontainers と H2</a></li>
+    <li><a href="#s7">テストが本物か確かめる（ミューテーション）</a></li>
+    <li><a href="#s8">つまずきポイント集</a></li>
+  </ol>
+</div>
+
+
+<h2 id="s1"><span class="num">1</span>そもそもテストとは何をするものか</h2>
+<p class="h2sub">まず結論：手で確認していることを、プログラムに代わりにやらせるだけです。</p>
+
+<p class="body">新機能を作ったとき、今まではこうしていたはずです。</p>
+
+<pre>1. アプリを起動する
+2. ブラウザでログインする
+3. 投稿に「いいね」を押す
+4. 数字が <b>1</b> になったのを<b>目で見る</b></pre>
+
+<p class="body">テストは、この4番を<b>コードで書く</b>だけです。</p>
+
+<pre>いいねを押す  →  数字が 1 になっている<b>はず</b></pre>
+
+<div class="card">
+  <h3>テストの本当の価値 <span class="tag tag-core">中心概念</span></h3>
+  <p class="role">価値：今動くことの確認ではなく、<b>3ヶ月後に壊れたら気づけること</b></p>
+  <p>一度書けば、コマンド1つで何百回でも自動実行できます。別の機能をいじって、うっかり「いいね」を壊しても、その場で赤くなって教えてくれます。</p>
+  <div class="analogy"><b>たとえ：</b>健康診断。受けた瞬間に健康になるわけではないが、<b>去年と比べて悪くなった箇所</b>が分かる。テストも「今正しい」ことより「前と変わってしまった」ことを検出するために効く。</div>
+</div>
+
+<div class="note key">
+  <div><b>覚えておくこと：</b>テストは「バグを見つける道具」というより「<b>バグが入り込んだことに気づく仕組み</b>」。だから一度書いて終わりではなく、以後ずっと動かし続けるものになる。</div>
+</div>
+
+
+<h2 id="s2"><span class="num">2</span>テストの5段階（階層イメージ）</h2>
+<p class="h2sub">小さく速いものが下、本物に近く遅いものが上。下から順に固めていきます。</p>
+
+<div class="pyramid">
+  <div class="tier t5">
+    <div>
+      <div class="name">⑤ E2Eテスト</div>
+      <div class="meta">ブラウザを自動操作して、最初から最後まで通す</div>
+    </div>
+    <span class="badge tag-todo">今回やらない</span>
+  </div>
+  <div class="tier t4">
+    <div>
+      <div class="name">④ フロントエンドのテスト</div>
+      <div class="meta">画面のボタンを押したら期待どおり動くか（Vitest）</div>
+    </div>
+    <span class="badge tag-sub">予定</span>
+  </div>
+  <div class="tier t3">
+    <div>
+      <div class="name">③ 結合テスト</div>
+      <div class="meta">実DB・HTTP経由で通しで動くか（Mapper / Controller）</div>
+    </div>
+    <span class="badge tag-sub">予定</span>
+  </div>
+  <div class="tier t2">
+    <div>
+      <div class="name">② 単体テスト（機能）</div>
+      <div class="meta">いいね・フォローなどの判断ロジック（Service層 + Mockito）</div>
+    </div>
+    <span class="badge tag-todo">次はここ</span>
+  </div>
+  <div class="tier t1">
+    <div>
+      <div class="name">① 単体テスト（部品）</div>
+      <div class="meta">文字数を数える・画像か判定する、などの小さな道具</div>
+    </div>
+    <span class="badge tag-done">✓ 63本 完了</span>
+  </div>
+  <div class="axis"><span>← 下ほど 速い・数を書ける・原因が特定しやすい</span></div>
+</div>
+
+<p class="body">この順で進める理由はシンプルで、<b>下の層が壊れていると、上の層のテストも意味をなさない</b>からです。文字数の数え方が間違っていたら、画面のテストが通っても信用できません。</p>
+
+<div class="note">
+  <div><b>E2Eを今回やらない理由：</b>ブラウザを自動操作するため<b>遅く・壊れやすい</b>（画面の文言を変えただけで落ちる）。学習の優先度としては、下の4層を固めるほうが得るものが大きいと判断した。</div>
+</div>
+
+
+<h2 id="s3"><span class="num">3</span>層によって「道具」が変わる理由</h2>
+<p class="h2sub">判断基準はひとつ。「周りを偽物に置き換えても、確かめたいものが残るか」。</p>
+
+<div class="tscroll">
+<table>
+  <tr><th>層</th><th>中身は何か</th><th>偽物に置き換えると</th><th>やり方</th></tr>
+  <tr>
+    <td><b>Service</b></td><td>if文・順序・計算などの<b>判断</b></td>
+    <td class="ok">判断は残る ○</td><td><b>単体</b>テスト（Mockito）</td>
+  </tr>
+  <tr>
+    <td><b>Mapper</b></td><td>ほぼ <b>SQL だけ</b>（XMLに記述）</td>
+    <td class="ng">SQLが消える ×</td><td><b>結合</b>テスト（実DB）</td>
+  </tr>
+  <tr>
+    <td><b>Controller</b></td><td>ほぼ<b>受け渡しだけ</b></td>
+    <td class="ng">通す先が消える ×</td><td><b>結合</b>テスト（実DB＋HTTP）</td>
+  </tr>
+</table>
+</div>
+
+<h3 class="plain">なぜ Mapper を単体テストできないのか</h3>
+<p class="body">Mapper の Java ファイルは<b>メソッド名の宣言だけ</b>で、中身は XML に書いた SQL です。つまり自分で書いたのは SQL のほうです。ここを偽物（モック）に置き換えると、こうなります。</p>
+
+<pre>モック「findTimeline が呼ばれたら、この3件を返すことにします」
+      ↓
+テスト「3件返ってきた。<span class="ok">OK</span>」
+
+  → <span class="ng">自分が書いたSQLは1行も実行されていない</span></pre>
+
+<p class="body">特に怖いのが、次のような書き忘れです。</p>
+
+<pre><b>-- deleted_at IS NULL を書き忘れた（削除済みが出てしまう）</b>
+SELECT * FROM posts WHERE user_id = #{userId}</pre>
+
+<p class="body">重大なバグですが、SQLを実行していないテストでは<b>絶対に見つかりません</b>。だから Mapper は実DBで動かすしかない、という結論になります。</p>
+
+<div class="note">
+  <div><b>MyBatis 特有の落とし穴：</b>カラム名を書き間違えても<b>起動時にはエラーにならず、値が黙って <code>null</code> になる</b>。これも実際にSQLを流さないと気づけない。</div>
+</div>
+
+<h3 class="plain">Controller も同じ理由</h3>
+<p class="body">Controller 自身は「受け取って渡して返す」だけですが、その<b>周りに重要な部品が並んで</b>います。確かめたいのは、この一連が通しで動くかどうかです。</p>
+
+<pre>リクエスト
+   ↓
+<b>JWT認証フィルタ</b>        ← 未ログインなら 401
+   ↓
+<b>Spring Security</b>
+   ↓
+<b>@Valid バリデーション</b>   ← ①で作った文字数チェックはここ
+   ↓
+Controller
+   ↓
+<b>例外ハンドラ</b>            ← 403 / 404 を JSON に変換</pre>
+
+<div class="note key">
+  <div><b>まとめ：</b>「単体テストしない層」があるのではなく、<b>層によって呼び方と道具が変わる</b>だけ。やらない層はひとつもない。</div>
+</div>
+
+
+<h2 id="s4"><span class="num">4</span>ブラックボックス と ホワイトボックス</h2>
+<p class="h2sub">テストケースを「何を見て」作るか、という視点の違いです。</p>
+
+<div class="cols">
+  <div class="col">
+    <h4>⬛ ブラックボックステスト <span class="tag tag-core">期待値はこちら</span></h4>
+    <p><b>仕様書だけを見て</b>作る。中身のコードは見ない。</p>
+    <ul>
+      <li>「280文字まで」と仕様にあるなら、280と281を試す</li>
+      <li>実装がどう書かれていようと関係ない</li>
+      <li><b>実装のバグに引きずられない</b>のが最大の利点</li>
+    </ul>
+  </div>
+  <div class="col">
+    <h4>⬜ ホワイトボックステスト <span class="tag tag-sub">漏れの確認に</span></h4>
+    <p><b>実装の中身（分岐）を見て</b>作る。</p>
+    <ul>
+      <li>if が3つあるなら、3つとも通るケースを用意する</li>
+      <li>実装固有の癖（正規表現など）を拾える</li>
+      <li>ただし<b>実装の誤解をそのまま正解にしてしまう</b>危険</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note">
+  <div><b>ホワイトボックスだけだと危ない理由：</b>仕様が「上限100」なのに実装が「上限50」だった場合、実装を見てテストを書くと「51でエラー」と書いてしまう。<b>実装もテストも間違っているのに、両方とも緑になる</b>。</div>
+</div>
+
+<p class="body"><b>だから両方使います。</b>今回の進め方はこうしました。</p>
+
+<pre><span class="pmark">[1] ブラックボックス</span>  設計書を見て、期待値の表を作る
+        ↓
+<span class="pmark">[2] ホワイトボックス</span>  実装の分岐と突き合わせ、<b>通っていない経路が無いか</b>確認
+        ↓
+<span class="pmark">[3]</span>  テストコードを書く</pre>
+
+<p class="body">作った表（<code>docs/11_test_design.md</code>）には<b>「根拠」列</b>を設けて、期待値の出典（設計書のどこか）を必ず書くようにしました。ここが空欄のケースは仕様の裏付けが無い、と一目で分かります。</p>
+
+
+<h2 id="s5"><span class="num">5</span>ケースの作り方（3つの技法）</h2>
+<p class="h2sub">「なんとなく思いついたケース」ではなく、機械的に洗い出すための型。</p>
+
+<div class="card">
+  <h3>① 同値分割 <span class="tag tag-core">まず全体を分ける</span></h3>
+  <p>入力を「<b>同じ結果になるグループ</b>」に分け、各グループから代表を1つだけ選ぶ。</p>
+  <p>文字数チェックなら「短すぎる／ちょうどいい／長すぎる」の3グループ。3文字も5文字も同じ「ちょうどいい」なので、<b>両方試す意味はない</b>。</p>
+  <div class="analogy"><b>ねらい：</b>無限にある入力を、意味のある少数に減らす。</div>
+</div>
+
+<div class="card">
+  <h3>② 境界値分析 <span class="tag tag-core">バグは境目に出る</span></h3>
+  <p>グループの<b>境目</b>を狙う。<code>min-1</code> / <code>min</code> / <code>max</code> / <code>max+1</code> の4点が基本。</p>
+  <p>バグの多くは <code>&lt;</code> と <code>&lt;=</code> の書き間違いなど、境目1つ分のズレで起きる。真ん中の値をいくら試しても見つからない。</p>
+  <pre>上限50文字の場合:
+  49文字  … 通るはず
+  <b>50文字  … 通るはず（境界）</b>
+  <b>51文字  … 落ちるはず（境界+1）</b></pre>
+</div>
+
+<div class="card">
+  <h3>③ デシジョンテーブル <span class="tag tag-core">条件の組み合わせ</span></h3>
+  <p>失敗のしかたが複数あるとき、<b>表にして漏れを潰す</b>。</p>
+  <p>実際に、カーソル（ページの「しおり」）の変換処理で表を作ったところ、<b>当初の計画に無かったケースが4件</b>見つかった。表にしないと頭の中では拾いきれない。</p>
+  <div class="analogy"><b>見つかった例：</b>IDが負数のとき／前後に空白があるとき／末尾に余計な文字があるとき／<code>null</code> を渡したとき。</div>
+</div>
+
+<div class="note key">
+  <div><b>実感したこと：</b>「境界を確認する」とメモしただけでは不十分で、<b>どの値を叩くかまで決めて表に書く</b>ことで初めて漏れが見える。技法は難しい理論ではなく、<b>抜けを防ぐためのチェックリスト</b>に近い。</div>
+</div>
+
+
+<h2 id="s6"><span class="num">6</span>テスト用DB — Testcontainers と H2</h2>
+<p class="h2sub">「テストのせいで開発中のデータが汚れる」問題をどう解くか。</p>
+
+<p class="body">いいねのテストをするには<b>データベースが必要</b>です。でも普段使っている開発用DBをそのまま使うと、テストが作ったゴミデータが溜まっていきます。だから<b>テスト専用のDB</b>が要ります。ここで候補が2つ出ました。</p>
+
+<div class="cols">
+  <div class="col">
+    <h4>H2 <span class="tag tag-sub">今回は不採用</span></h4>
+    <p><b>すごく軽いお手軽データベース。</b>インストール不要で、テスト開始時に一瞬で立ち上がり、終わると消える。</p>
+    <ul>
+      <li>とにかく速い・準備が簡単</li>
+      <li>多くのプロジェクトで使われる定番</li>
+      <li class="ng"><b>本番のPostgreSQLとは別物</b></li>
+    </ul>
+  </div>
+  <div class="col">
+    <h4>Testcontainers <span class="tag tag-done">採用</span></h4>
+    <p><b>本物のPostgreSQLを1台、自動で立ち上げて捨てる。</b>Docker を使う。</p>
+    <ul>
+      <li class="ok"><b>本番と同じDB</b>で試せる</li>
+      <li>終了時に自動で破棄。ゴミが残らない</li>
+      <li>起動に十数秒かかる／Docker が要る</li>
+    </ul>
+  </div>
+</div>
+
+<h3 class="plain">なぜ H2 が使えなかったか</h3>
+<p class="body">料理でたとえると、このアプリは<b>業務用オーブン（PostgreSQL）にしかない機能</b>を使うレシピで書かれていました。H2 は電子レンジです。どちらも加熱はできますが、同じではありません。</p>
+
+<p class="body">決定的だったのがこれです。ユーザー検索のために、PostgreSQL 専用の拡張機能を有効にしています。</p>
+
+<pre>CREATE EXTENSION IF NOT EXISTS <b>pg_trgm</b>;   -- 「田中たろう」を「たろう」で探せるようにする</pre>
+
+<p class="body">この命令は<b>DBの準備段階（一番最初）</b>で実行されます。H2 にはこの機能が無いため、こうなります。</p>
+
+<pre>テスト開始
+   ↓
+テーブルを作る
+   ↓
+CREATE EXTENSION pg_trgm  →  <span class="ng">H2「そんな命令は知らない」でエラー</span>
+   ↓
+<span class="ng">停止。テストは1本も動かない</span></pre>
+
+<div class="note">
+  <div><b>「一部が動かない」ではなく「入口で全滅」だった。</b>他にも動かない箇所が8つあり（カーソルページング・ユーザー検索・投稿作成など主要機能のほぼ全部）、H2 用に別のSQLを書けば動かせるが、それは<b>電子レンジ用のレシピをテストして、業務用オーブンで本番を動かす</b>ことになる。テストが通っても本番で壊れるので意味がない。</div>
+</div>
+
+<h3 class="plain">結果として、当初の心配はより良く解決された</h3>
+<pre><b>【普段の開発】</b>
+  アプリ ──→ PostgreSQL（開発用 snstimeline）
+                 ↑ 手動テストのデータが入っている
+
+<b>【テスト実行時】</b>
+  テスト ──→ PostgreSQL（<b>テスト用・使い捨て</b>）  ← 新しく起動
+                 ↑ 開発用とは完全に別物
+             <span class="ok">テスト終了と同時に消滅。ゴミも残らない</span></pre>
+
+<div class="note key">
+  <div><b>学び：</b>「H2でテスト用DBを作る」という当初の方針は<b>考え方としては正しかった</b>。ただし手段が今回のアプリに合わなかっただけ。目的（開発用DBを汚さない）は Testcontainers のほうがより確実に果たせた。<b>手段が使えないとき、目的まで捨てなくてよい。</b></div>
+</div>
+
+
+<h2 id="s7"><span class="num">7</span>テストが本物か確かめる（ミューテーション）</h2>
+<p class="h2sub">緑になっているテストが、実は何も検証していないことがある。</p>
+
+<p class="body">アサーション（確認）が緩かったり、対象を呼び忘れていたりすると、テストは<b>常に緑</b>になります。これが一番たちが悪い状態です。緑なのに何も守られていないからです。</p>
+
+<p class="body">そこで、<b>わざと実装を壊して、テストが赤くなるか</b>を確かめました。</p>
+
+<div class="tscroll">
+<table>
+  <tr><th>わざと壊した内容</th><th>結果</th></tr>
+  <tr><td>カーソルの時刻を<b>マイクロ秒 → 秒</b>に戻す（過去に出たバグの再現）</td><td class="ok">✓ 4件が赤</td></tr>
+  <tr><td>WebP画像の判定を<b>先頭4バイトだけ</b>にする</td><td class="ok">✓ 3件が赤</td></tr>
+  <tr><td>文字数を<b>コードポイント → UTF-16</b>で数えるように変える</td><td class="ok">✓ 3件が赤</td></tr>
+</table>
+</div>
+
+<p class="body">3つとも検出できました。壊した箇所と落ちたテストがきちんと対応しており、<b>回帰（あとから壊れること）に気づける</b>ことが実証されました。確認後、実装は元に戻しています。</p>
+
+<div class="note key">
+  <div><b>合言葉：</b>「緑だから安心」ではなく、<b>「落ちることまで確かめて初めてテストが機能する」</b>。</div>
+</div>
+
+
+<h2 id="s8"><span class="num">8</span>つまずきポイント集</h2>
+<p class="h2sub">実際にぶつかった／回避したもの。</p>
+
+<div class="tscroll">
+<table>
+  <tr><th>ポイント</th><th>内容</th></tr>
+  <tr>
+    <td><b>テストは実装の写経ではない</b></td>
+    <td>実装を見て書くと、実装が仕様を誤解していた場合に<b>テストも同じ誤解をする</b>。期待値は必ず設計書から引く。</td>
+  </tr>
+  <tr>
+    <td><b>「割り切り」もテストに書く</b></td>
+    <td>絵文字 👨‍👩‍👧 は見た目1文字だが<b>5文字として数える</b>仕様。これをテストに書かないと、後から見た人がバグと誤認して直してしまう。<b>意図的な仕様であることの記録</b>になる。</td>
+  </tr>
+  <tr>
+    <td><b>設計書も間違う</b></td>
+    <td>上の 👨‍👩‍👧 を、表を作った時点では「3文字」と書いていた。実際に動かしたら<b>5文字</b>だった（絵文字3個＋見えない接着文字2個）。机上の想定は実行で必ず確認する。</td>
+  </tr>
+  <tr>
+    <td><b>1ケースでは検証にならないことがある</b></td>
+    <td>「記号が出ないこと」の確認は、<b>たまたま出ない入力</b>を選んでいる可能性がある。値を変えて多数試す（パラメータ化テスト）。</td>
+  </tr>
+  <tr>
+    <td><b>テストの命名規則</b></td>
+    <td>このプロジェクトではクラス名を <code>*Test</code> に統一する。<code>*IT</code> にすると別の仕組みの管轄になり、<code>./mvnw test</code> で走らなくなる。</td>
+  </tr>
+  <tr>
+    <td><b>Docker の起動を忘れる</b></td>
+    <td>実DBを使うテストは Testcontainers が Docker を使う。起動していないと <code>Could not find a valid Docker environment</code> で失敗する。</td>
+  </tr>
+</table>
+</div>
+
+
+<footer>
+  <p>SnsTimeLineApp 学習メモ · 2026-09-02（テスト基盤構築〜部品の単体テスト63本 完了時点）</p>
+  <p>実際のテストケース表は <a href="../11_test_design.md">11_test_design.md</a>、
+     必ず書くべきテスト17項目は <a href="../06_non_functional.md">06_non_functional.md</a> 5.3、
+     採用理由の記録は <a href="../09_decision_log.md">09_decision_log.md</a>（D-54：Testcontainers採用 / D-55・D-56：テストの方針）を参照。</p>
+</footer>
+
+</div>
+
+<script>
+  document.getElementById('themebtn').addEventListener('click', function () {
+    var root = document.documentElement;
+    var isDark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  });
+</script>
+</body>
+</html>
