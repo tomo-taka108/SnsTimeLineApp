@@ -18,5 +18,6 @@
 - **jwt-auth-basics** は 2026-08-23 の**認証バックエンド実装**（新規登録 / ログイン / `GET /auth/me` / トークン再発行 / ログアウト）時点のもの。**アクセストークン＋リフレッシュトークン方式**に対応済み。
   - 採用理由の正式な記録は [09_decision_log.md](../09_decision_log.md) の D-07（JWTの保管場所）、D-25〜D-28（MyBatis・jjwt・トリム方針・JDK/Spring Bootのバージョン）、**D-29（アクセストークン＋リフレッシュトークン方式）** にある。
 - **testing-basics** は 2026-09-02 の**テスト基盤構築〜部品の単体テスト63本完了**時点のもの。Service層・結合テスト・フロントエンドは未着手。
+  - ⚠️ **途中経過の版。テスト実装がすべて完了した時点で更新する**（[Issue #35](https://github.com/tomo-taka108/SnsTimeLineApp/issues/35)）。考え方の部分は完了後も大きくは変わらないが、上位層の実践内容が薄い。
   - 実際のテストケース表は [11_test_design.md](../11_test_design.md)、必ず書くべきテスト17項目は [06_non_functional.md](../06_non_functional.md) 5.3、採用理由の正式な記録は [09_decision_log.md](../09_decision_log.md) の **D-54（Testcontainers採用）**・D-55・D-56 にある。
 - HTML は GitHub 上ではソースとして表示される（描画はされない）。閲覧するときはローカルで開く。
