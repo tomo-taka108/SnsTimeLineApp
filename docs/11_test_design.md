@@ -283,14 +283,165 @@
 | 節 | 対象 | 主な技法 | 状態 |
 |---|---|---|---|
 | 1〜3 | CursorCodec / Validator / ImageType | 同値・境界・表 | **実装完了**（63テスト） |
-| 6 | Service層（いいね・フォローの冪等性） | **状態遷移** | 未着手 |
-| 7 | Service層（認可順序 404→403） | デシジョンテーブル | 未着手 |
-| 8 | Mapper層（論理削除・カーソル） | 境界値 | 未着手 |
-| 9 | フロントエンド（validation / datetime） | 境界値 | 未着手 |
+| 6 | Service層（LikeService の冪等性） | **状態遷移** | **実装完了**（12ケース） |
+| 8 | Service層（残り8クラス。認可順序 404→403 を含む） | 状態遷移・デシジョンテーブル | 未着手 |
+| 9 | Mapper層（論理削除・カーソル） | 境界値 | 未着手 |
+| 10 | フロントエンド（validation / datetime） | 境界値 | 未着手 |
 
 ---
 
-## 6. 参照
+## 6. Service層（LikeService）
+
+対象: [LikeService.java](../backend/src/main/java/com/example/snstimeline/post/LikeService.java)
+テストクラス: `post/LikeServiceTest`
+
+### 6.0 部品のテストとの違い
+
+ここから検証の性質が変わる。1〜3章は「入力 → 出力」を見るだけだったが、Service層は
+**「何が呼ばれたか／呼ばれなかったか」**を確かめる。ここで初めて **Mockito** を使う。
+
+| | 部品（1〜3章） | Service層（本章） |
+|---|---|---|
+| 検証対象 | 戻り値 | 戻り値 ＋ **モックへの呼び出し** |
+| 主な技法 | 同値分割・境界値 | **状態遷移**・呼び出し検証 |
+| 道具 | なし | `verify` / `never()` / `InOrder` |
+
+**モックとは**、本物の代わりに置く偽物のこと。`LikeMapper` は本来DBにアクセスするが、
+テストでは偽物に差し替え、「どう呼ばれたか」を記録させる。DBが要らないので**1秒未満で終わる**。
+
+### 6.1 仕様
+
+いいねは**冪等**でなければならない（[06_non_functional.md](06_non_functional.md) 5.3 / D-01）。
+
+> **冪等（べきとう）**: 同じ操作を何回繰り返しても結果が変わらない性質。
+> 「いいね」を2回押しても、いいね数は1のまま。通信の再送や連打で数が狂わないために必要。
+
+```
+        like()                    like()（2回目は何も起きない）
+  ┌──────────────────→ ┌───────────┐
+未いいね                 いいね済み ←─┘
+  ↑ └───────────────────────┘
+  │            unlike()
+  └── unlike()（未いいねへの解除も壊れない）
+```
+
+実装の要点は**2つのガード**。ここが冪等性を担保している。
+
+```java
+public LikeResponse like(Long meId, Long postId) {
+  postMapper.findById(postId).orElseThrow(NotFoundException::new);   // 存在チェック
+
+  if (!likeMapper.exists(postId, meId)) {        // ← ガード①（事前SELECT、D-34）
+    likeMapper.insert(postId, meId);
+    likeMapper.incrementLikeCount(postId);
+  }
+  return new LikeResponse(likeMapper.findLikeCount(postId), true);   // ← ガードの外側
+}
+
+public LikeResponse unlike(Long meId, Long postId) {
+  postMapper.findById(postId).orElseThrow(NotFoundException::new);
+
+  int affected = likeMapper.delete(postId, meId);
+  if (affected > 0) {                            // ← ガード②（削除件数で判定）
+    likeMapper.decrementLikeCount(postId);
+  }
+  return new LikeResponse(likeMapper.findLikeCount(postId), false);
+}
+```
+
+### 6.2 冪等性（状態遷移）
+
+**17項目の①②に直接対応する。本章の中核。**
+
+| # | 状態 | 操作 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 54 | 未いいね | like | `insert`・`increment` が**各1回** | いいねが保存されない | 5.3 ① |
+| 55 | **いいね済み** | like | **`insert`・`increment` を呼ばない** | **いいね数が2になる** | 5.3 ① / D-34 |
+| 56 | いいね済み | unlike | `delete` が1件 → `decrement` が1回 | 解除しても数が減らない | 5.3 ② |
+| 57 | **未いいね** | unlike | `delete` が**0件** → **`decrement` を呼ばない** | **数がマイナスになる** | 5.3 ② |
+
+> **#55・#57 が本命。** どちらも「**呼ばれないこと**」の検証で、`verify(mock, never())` を使う。
+> 部品のテストには無かった観点。バグは「余計なことをした」ときに起きるため、
+> **やっていないことを確かめる**必要がある。
+
+### 6.3 認可・順序
+
+| # | 状態 | 操作 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 58 | 投稿なし | like | **404**。かつ `likeMapper` に**一切触れない** | 存在しない投稿へのゴミデータが残る | D-14 |
+| 59 | 投稿なし | unlike | **404**。同上 | 同上 | D-14 |
+| 60 | 未いいね | like | **`insert` → `increment` の順** | カウンタだけ増えて実体が無い状態が生じうる | D-01 |
+
+> #58・#59 は `verifyNoInteractions(likeMapper)` で「1回も触っていない」ことを確かめる。
+> #60 は `InOrder` で呼び出し順序を検証する。
+
+### 6.4 戻り値と引数
+
+| # | 何を確かめるか | 壊れると何が起きるか |
+|---|---|---|
+| 61 | いいね数を `findLikeCount` の値**そのまま**返す（自分で加算しない） | 画面の数字がずれる（二重加算） |
+| 62 | `unlike` は `isLikedByMe = false` を返す | ハートの色が戻らない |
+| 63 | いいね数が 0 でも正常に返る | 「-1件」と表示される |
+| 64 | `findLikeCount` は**2回目でも呼ばれる**（ガードの**外側**にある） | **2回目のいいねで数が 0 になる** |
+| 65 | mapper に渡る引数が `(postId, meId)` の順 | **別人のいいねになる**（気づきにくい） |
+
+**#64 の意味** — #55 と対になっている。
+
+```java
+if (!likeMapper.exists(...)) {
+  likeMapper.insert(...);            // 2回目は呼ばれない  ← #55 が確認
+  likeMapper.incrementLikeCount(...);
+}
+return new LikeResponse(likeMapper.findLikeCount(postId), true);  // 2回目も呼ばれる ← #64 が確認
+```
+
+将来 `return` ごとガードの内側へ移す変更が入ると、2回目のレスポンスが 0 になる。それを検出する。
+
+**#65 の意味** — 引数の取り違え検出。
+
+```java
+like(Long meId, Long postId)      ← ユーザーID, 投稿ID の順
+insert(Long postId, Long userId)  ← 投稿ID, ユーザーID の順（逆！）
+```
+
+**どちらも `Long` のため、取り違えてもコンパイルが通る。** 間違えるとユーザーIDと投稿IDが入れ替わり、
+いいね数は増えるので**画面上は正常に見える**。気づくのは別のユーザーが
+「押していないのにいいねした扱いになっている」と気づいたときで、原因究明に時間がかかる。
+
+### 6.5 網羅状況（ホワイトボックス視点）
+
+| メソッド | 分岐 | 踏むケース |
+|---|---|---|
+| `like` | 投稿が無い | #58 |
+| | `exists` が false（未いいね） | #54 #60 #61 #65 |
+| | `exists` が true（いいね済み） | #55 #64 |
+| `unlike` | 投稿が無い | #59 |
+| | `delete > 0` | #56 |
+| | `delete == 0` | #57 #62 #63 |
+
+**分岐網羅（C1）を達成している。** 未到達の分岐は無い。
+
+---
+
+### 6.6 テストが本当に落ちるかの確認（ミューテーション）
+
+4.1節と同じ手順。わざと実装を壊し、対応するテストが赤くなることを確認してから元に戻した。
+
+| # | 壊した内容 | 想定 | 結果 |
+|---|---|---|---|
+| 1 | `if (!likeMapper.exists(...))` を `if (true)` に（冪等性ガードを外す） | #55 が落ちる | ✅ #55 を含む6件が赤 |
+| 2 | `if (affected > 0)` を `if (true)` に（解除側のガードを外す） | #57 が落ちる | ✅ **#57 のみ**が赤 |
+| 3 | `insert(postId, meId)` を `insert(meId, postId)` に（引数を逆転） | #65 が落ちる | ✅ #65 を含む3件が赤 |
+| 4 | `return` をガードの内側へ移す | #64 が落ちる | ✅ #64 を含む2件が赤 |
+
+**4つとも検出できた。** 特に注目すべきは2件。
+
+- **#2 はピンポイントで1件だけ落ちた。** 「未いいねの解除でカウンタを減らさない」という
+  1つの振る舞いに、テストが1対1で対応している証拠
+- **#3 の引数逆転は、実行しても例外が出ず、いいね数も正しく増える**ため、
+  テストが無ければ気づけない。`verify` で引数まで固定している効果が出た
+
+## 7. 参照
 
 | 文書 | 内容 |
 |---|---|
