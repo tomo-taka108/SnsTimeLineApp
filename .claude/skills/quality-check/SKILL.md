@@ -66,18 +66,18 @@ cd backend && ./mvnw test
 |---|---|
 | いいねの冪等性 | 同じ投稿に2回いいねしてもカウンタが2にならない（事前SELECT方式、D-34）<br>→ `LikeServiceTest` #54〜#55 #60〜#61 #64〜#65 |
 | いいね解除の冪等性 | いいねしていない状態で解除しても壊れない<br>→ `LikeServiceTest` #56〜#57 #62〜#63 |
-| フォローの冪等性 | 同じユーザーを2回フォローしてもフォロワー数が2増えない（いいねと同じ事前SELECT方式、D-37） |
-| フォロー解除の冪等性 | フォローしていない状態で解除しても壊れない |
+| フォローの冪等性 | 同じユーザーを2回フォローしてもフォロワー数が2増えない（いいねと同じ事前SELECT方式、D-37）<br>→ `FollowServiceTest` #100〜#101 |
+| フォロー解除の冪等性 | フォローしていない状態で解除しても壊れない<br>→ `FollowServiceTest` #103〜#104 |
 | コメント削除時のカウンタ | コメントを論理削除すると `comment_count` が -1 される<br>→ `CommentServiceTest` #86 #88 |
 | 投稿削除時のカウンタ | 投稿を論理削除しても `comment_count` は変わらない（**非対称ルール**）<br>→ `PostServiceTest` #70 |
 | 論理削除の除外 | 削除済み投稿がTLに出ない、GETで404になる |
-| 自己フォローの拒否 | 自分をフォローすると400（`SELF_FOLLOW_NOT_ALLOWED`） |
+| 自己フォローの拒否 | 自分をフォローすると400（`SELF_FOLLOW_NOT_ALLOWED`）<br>→ `FollowServiceTest` #106〜#107 |
 | 他人のリソース操作 | 他人の投稿を削除すると403、存在しない投稿は404（**順序が重要**）<br>→ `PostServiceTest` #66〜#67、`CommentServiceTest` #84〜#85 |
-| プロフィールのカウント算出 | `postCount` / `followingCount` / `followerCount` が実データと一致する（非正規化していないため、D-36） |
+| プロフィールのカウント算出 | `postCount` / `followingCount` / `followerCount` が実データと一致する（非正規化していないため、D-36）<br>→ `UserServiceTest` #121 |
 | カーソルページネーション | 同一 `created_at` の投稿が2件あっても取りこぼさない |
-| ファイル所有者チェック | 他人の `fileId` を指定した投稿が403になる |
-| 画像のマジックバイト検証 | `.jpg` にリネームしたテキストファイルが 415 で拒否される（拡張子・Content-Typeだけを見ていないこと、D-42） |
-| アップロードサイズ超過 | 5MB超が **500ではなく 413 `FILE_TOO_LARGE`** になる（Springのmultipart例外を捕捉できているか、D-42） |
+| ファイル所有者チェック | 他人の `fileId` を指定した投稿が403になる<br>→ `FileServiceTest` #201〜#202、`UserServiceTest` #133〜#134 |
+| 画像のマジックバイト検証 | `.jpg` にリネームしたテキストファイルが 415 で拒否される（拡張子・Content-Typeだけを見ていないこと、D-42）<br>→ `FileServiceTest` #192〜#195 |
+| アップロードサイズ超過 | 5MB超が **500ではなく 413 `FILE_TOO_LARGE`** になる（Springのmultipart例外を捕捉できているか、D-42）<br>→ `FileServiceTest` #188〜#189 |
 | 画像配信の認証要否 | `GET /files/{id}` が**認証なしで200**、`POST /files` は認証なしで401 |
 | ストレージ抽象化 | `app.storage.type` を LOCAL / S3 で切り替えても、APIのレスポンス（`url` の形）が変わらない（D-40） |
 
