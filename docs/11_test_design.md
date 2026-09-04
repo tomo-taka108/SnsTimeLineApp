@@ -285,9 +285,9 @@
 | 1〜3 | CursorCodec / Validator / ImageType | 同値・境界・表 | **実装完了**（63テスト） |
 | 6 | Service層（LikeService の冪等性） | **状態遷移** | **実装完了**（12ケース） |
 | 8〜9 | Service層（PostService / CommentService） | 状態遷移・デシジョンテーブル | **実装完了**（34ケース） |
-| — | Service層（残り6クラス） | 状態遷移・表 | 未着手 |
-| 11 | Mapper層（論理削除・カーソル） | 境界値 | 未着手 |
-| 12 | フロントエンド（validation / datetime） | 境界値 | 未着手 |
+| 11〜17 | Service層（Follow / User / UserSearch / Auth / RefreshToken / File） | 状態遷移・デシジョンテーブル | **実装完了**（104ケース、Service層完走） |
+| 19 | Mapper層（論理削除・カーソル） | 境界値 | 未着手 |
+| 20 | フロントエンド（validation / datetime） | 境界値 | 未着手 |
 
 ---
 
@@ -644,8 +644,431 @@ insert(Long postId, Long userId)  ← 投稿ID, ユーザーID の順（逆！�
 「1つの振る舞いにテストが1対1で対応している」ことが確認できた。
 
 確認後、実装はすべて元に戻した（`git diff` で production code の差分が0行であることを確認済み）。
+## 11. Service層（FollowService）
 
-## 10. 参照
+対象: [FollowService.java](../backend/src/main/java/com/example/snstimeline/follow/FollowService.java)
+テストクラス: `follow/FollowServiceTest`
+
+### 11.1 仕様
+
+フォローも `LikeService` と同じ**冪等性**が要求される（[06_non_functional.md](06_non_functional.md) 5.3、D-37）。
+ただし2点、`LikeService` と異なる。
+
+1. **カウンタを持たない。** `followerCount` / `followingCount` は非正規化せず、毎回 `COUNT(*)`（D-36）。
+   `incrementFollowerCount` のようなメソッドは存在しない
+2. **`follow` と `unfollow` が非対称。** `follow` には「自分自身か」という追加の判定（400
+   `SELF_FOLLOW_NOT_ALLOWED`）があるが、`unfollow` には無い
+
+```
+        follow()                    follow()（2回目は insert しない）
+  ┌──────────────────→ ┌───────────┐
+未フォロー                フォロー済み ←─┘
+  ↑ └───────────────────────┘
+  │            unfollow()
+  └── unfollow()（未フォローへの解除も壊れない）
+
+※ follow() だけ、この状態遷移の手前に「自分自身か」の判定がある
+```
+
+### 11.2 冪等性（状態遷移）
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 100 | 状態遷移 | 未フォローに `follow` | `insert` が呼ばれる | — | 05 の #21 |
+| 101 | 状態遷移 | **フォロー済みに `follow`（2回目）** | `insert` を呼ばない（冪等） | 連打・再送のたびにUNIQUE制約違反 or 重複行 | 06 の 5.3、D-37 |
+| 102 | 境界 | `follow` 成功後の `countFollowers` | ガードの**外側**で呼ばれる（未フォロー・フォロー済み両方） | 2回目のレスポンスの人数が更新されない | 05 の #21 |
+| 103 | 状態遷移 | フォロー済みに `unfollow` | `delete` が呼ばれる | — | 05 の #22 |
+| 104 | 状態遷移 | **未フォローに `unfollow`（2回目）** | 例外を投げず200を返す（冪等） | — | 06 の 5.3 |
+| 105 | 引数 | `follow` の mapper 呼び出し | `exists(meId, userId)` / `insert(meId, userId)` の順で引数が渡る | 取り違えると自分がフォローされる側になる | ★ |
+
+> **#101 が17項目「フォローの冪等性」そのもの。#104 が「フォロー解除の冪等性」そのもの。**
+
+### 11.3 自己フォロー拒否（順序が中心）
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 106 | 表 | `meId == userId`（存在するユーザー） | 400 `SELF_FOLLOW_NOT_ALLOWED`。`followMapper` に一切触れない | — | 06 の 5.3 |
+| 107 | 表 | **`meId == userId`（存在しないユーザーID）** | **400**（404ではない）。`userMapper.findById` も呼ばれない | 存在確認より先に自己判定が走ることを固定する | D-39 |
+| 108 | 表 | `unfollow` で `meId == userId` | **400にならない。** 存在すれば通常どおり `delete` が呼ばれる | `follow`/`unfollow` の非対称性を取り違えると自己解除ができなくなる | ★（`unfollow` に自己チェックが無い仕様） |
+
+> **#107 が本節の核心。** 自己チェックが存在チェックより後ろに来る実装に変わると、
+> 存在しないIDへの自己フォローが404に変わってしまう（D-39の回帰）。
+
+### 11.4 存在チェック・認可
+
+| # | 技法 | 入力 | 期待 | 根拠 |
+|---|---|---|---|---|
+| 109 | 同値 | `follow` で対象ユーザーが存在しない（自分自身ではない） | 404。`followMapper` に一切触れない | D-14 |
+| 110 | 同値 | `unfollow` で対象ユーザーが存在しない | 404。`followMapper` に一切触れない | D-14 |
+| 111 | 同値 | `getFollowing` / `getFollowers` で対象ユーザーが存在しない | 404 | D-14 |
+
+### 11.5 一覧取得（`limit` 検証の位置・N+1回避）
+
+`getFollowing` / `getFollowers` は「存在チェック → `clampLimit` → カーソルdecode」の順（`CommentService` と同じ形）。
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 112 | 表 | **ユーザーが存在せず、かつ `limit=999`** | **404**（400ではない）。Issue #37 で方針検討中、現状を固定 | `PostService` と順序が逆であることの回帰検知 | 09 の Issue #37 |
+| 113 | 境界 | `limit=0` | 400 | 06 の 5.3 |
+| 114 | 境界 | `limit=50` | 通る（`limit+1`=51件取得） | — |
+| 115 | 境界 | `limit=51` | 400 | 06 の 5.3 |
+| 116 | 境界 | `limit=null` | 既定値20で取得 | — |
+| 117 | 境界 | 取得件数が `limit` ちょうど | `hasNext=false`、`nextCursor=null` | 最終ページの後ろに空ページが出る | 05 の 2.2 |
+| 118 | 境界 | 取得件数が `limit+1` | `hasNext=true`、先頭 `limit` 件のみ返す | 存在しない次ページがあるように見える | 05 の 2.2 |
+| 119 | 同値 | **ページが空**（0件） | `findFollowedUserIds` を呼ばない（N+1回避） | 空配列に対してもクエリが飛ぶ | 04 の 6.6、D-38 |
+| 120 | 同値 | カーソルが `nextCursor` に含む値 | `CursorCodec.encode(followCreatedAt, followId)` を使う（**`userCreatedAt`/`userId` ではない**） | フォロー日時ではなくユーザー登録日時でページングされ、順序が崩れる | ★ |
+
+### 11.6 分岐網羅の確認（ホワイトボックス視点）
+
+| メソッド | 分岐 | ケース |
+|---|---|---|
+| `follow` | 自分自身 / 対象なし / 未フォロー / フォロー済み | #106 / #109 / #100 / #101 |
+| `unfollow` | 対象なし / フォロー済み / 未フォロー | #110 / #103 / #104 |
+| `getFollowing`/`getFollowers` | 対象なし / limit不正 / `hasNext` 各分岐 / 空ページ | #111 / #113#115 / #117#118 / #119 |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 12. Service層（UserService）
+
+対象: [UserService.java](../backend/src/main/java/com/example/snstimeline/user/UserService.java)
+テストクラス: `user/UserServiceTest`
+
+### 12.1 仕様 — プロフィール取得
+
+`postCount` / `followingCount` / `followerCount` は非正規化カウンタを持たず、毎回 `COUNT(*)`（D-36）。
+3つとも `int` の戻り値を持つ別々の呼び出し（`userMapper.countPosts` / `followMapper.countFollowing` /
+`followMapper.countFollowers`）のため、**実装がどれかを取り違えても型エラーにならず、画面の数字だけがずれる**。
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 121 | 同値 | 3つのカウントに**異なる値**をスタブ（例: posts=3, following=5, followers=7） | レスポンスの各フィールドがスタブした値と**一致**（取り違えていない） | プロフィール画面の「フォロー中」と「フォロワー」が入れ替わる | 06 の 5.3、17項目「プロフィールのカウント算出」 |
+| 122 | 同値 | 対象ユーザーが存在しない | 404。カウント系メソッドを一切呼ばない | — | D-14 |
+| 123 | 分岐 | **`isMe`（自分自身のプロフィール）** | `followMapper.exists` を**呼ばない**。`isFollowing` は常に `false` | 自分自身に対して不要なクエリが飛ぶ、または自分をフォロー中と誤表示する | 05 の 4章 |
+| 124 | 分岐 | 他人のプロフィール、フォロー中 | `followMapper.exists` を**呼ぶ**。`isFollowing=true` | — | 05 の #17 |
+
+> **#121 が本節の核心。** 3つとも同じ `int` の戻り値のため、コンパイラは取り違えを検出できない。
+> スタブを同じ値（例えば全部0）にすると、実装が入れ替わっていてもテストが気づけない —
+> **必ず異なる値を使う**のがポイント。
+
+### 12.2 プロフィール更新 — 部分更新の3状態（デシジョンテーブル）
+
+`UpdateProfileRequest` は「未送信」「明示的な `null`（削除指示）」「値あり」の3状態を区別する
+（`JsonNode` で受ける理由そのもの）。`bio` / `avatarFileId` / `coverFileId` はこの3状態を持つ。
+
+| # | 技法 | フィールド | 送信状態 | 期待 | 根拠 |
+|---|---|---|---|---|---|
+| 125 | 表 | `bio` | **未送信**（キー自体が無い） | `bioProvided=false`。`updateProfile` に渡る `bio` 引数は無視される（既存値を保持） | 05 の #19 |
+| 126 | 表 | `bio` | **明示的に `null`** | `bioProvided=true`、渡す値は `null`（削除） | 05 の #19 |
+| 127 | 表 | `bio` | 値あり（160文字以内） | `bioProvided=true`、トリム済みの値を渡す | 05 の #19 |
+| 128 | 境界 | `bio` | 161文字（コードポイント） | 400 | 06 の `BIO_MAX` |
+| 129 | 同値 | `avatarFileId` | 未送信 | `assertOwnedBy` を**呼ばない** | 05 の #19 |
+| 130 | 同値 | `avatarFileId` | **明示的に `null`（削除）** | `assertOwnedBy` を**呼ばない**（所有者チェック不要） | ★ D-44 の適用範囲外 |
+| 131 | 同値 | `avatarFileId` | 数値以外（文字列など） | 400。`fileService` に一切触れない | 05 の #19 |
+| 132 | 分岐 | `avatarFileId` / `coverFileId` 両方に他人のIDを指定 | **avatar が先**にチェックされ403で止まる。`coverFileId` の所有者チェックは実行されない | — | ★（コード上の記述順） |
+| 133 | 認可 | **他人の `avatarFileId`** | 403。`userMapper.updateProfile` に一切触れない | 他人のファイルを自分のプロフィールに設定できてしまう | 06 の 5.3、17項目「ファイル所有者チェック」 |
+| 134 | 認可 | **存在しない `avatarFileId`** | 404（403ではない） | D-14 の順序が壊れると存在の有無が漏れる | D-14、D-44 |
+| 135 | 境界 | `displayName` が空白のみ | 400 | 05 の #19 |
+| 136 | 境界 | `displayName` が51文字 | 400 | 06 の `DISPLAY_NAME_MAX` |
+| 137 | 同値 | 更新成功 | `getProfile(meId, meId)` が呼ばれ、その戻り値がそのままレスポンスになる | 更新直後の画面に古いカウントが出る | ★（自己呼び出しの検証） |
+| 138 | 同値 | `affected == 0`（論理削除との競合） | 404 | ★（自分自身の操作でも起こりうる競合） |
+
+> **#132〜#134 が「ファイル所有者チェック」の中心。** #134 は `FileService.assertOwnedBy`
+> 自体のテスト（16章）と重複するが、`UserService` 側から見ても403より404が優先されることを
+> 固定しておく価値がある（呼び出し側で誤って握りつぶさないか、という別の懸念のため）。
+
+### 12.3 分岐網羅の確認（ホワイトボックス視点）
+
+| メソッド | 分岐 | ケース |
+|---|---|---|
+| `getProfile` | 対象なし / isMe / 他人 | #122 / #123 / #124 |
+| `updateProfile` | 5つのバリデーション / avatar403 / avatar404 / cover403 / 競合404 / 正常 | #128 #131 #135 #136 / #133 / #134 / #132 / #138 / #137 |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 13. Service層（UserSearchService）
+
+対象: [UserSearchService.java](../backend/src/main/java/com/example/snstimeline/user/UserSearchService.java)
+テストクラス: `user/UserSearchServiceTest`
+
+### 13.1 仕様 — LIKEエスケープ（本章の中心）
+
+`%` はLIKE演算子のワイルドカードのため、**エスケープを忘れると `q=%` で全ユーザーが列挙される**
+（[04_data_model.md](04_data_model.md) 6.5）。SQLインジェクションではない（パラメータバインディングは効いている）が、
+**情報漏洩としては同等に危険**。パラメータバインディングだけでは防げないことがテストの主眼。
+
+```
+escapeLikePattern の処理順（順序が重要）:
+  1. \ → \\   （バックスラッシュを先に倍にする）
+  2. % → \%
+  3. _ → \_
+
+※ 2, 3 を先にやると、そこで生まれた \ をもう一度 \\ に変換してしまい、
+   意図しないエスケープになる。
+```
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 139 | 同値 | `q="%"` | エスケープ後 `"\%"`。`countSearchUsers` に渡る `qEscaped` がこの値 | **全ユーザーが列挙される** | 04 の 6.5、06 の 5.3「ファイル所有者チェック」と並ぶ必須項目相当 |
+| 140 | 同値 | `q="a_b"` | エスケープ後 `"a\_b"` | `_` が任意の1文字にマッチし、意図しないユーザーがヒットする | 04 の 6.5 |
+| 141 | 境界 | `q="\\"`（バックスラッシュ1文字） | エスケープ後 `"\\\\"`（2文字が4文字に） | — | ★ |
+| 142 | 境界 | **`q="\\%"`（バックスラッシュ＋パーセント）** | エスケープ後 `"\\\\\\%"`。**バックスラッシュが先に倍化されるため、後続の `%` のエスケープと混線しない** | 置換順序を逆にすると壊れる、まさにそのケース | ★（本節で最重要の回帰テスト） |
+| 143 | 同値 | `q` に対して `countSearchUsers` に渡る3引数 | `(qEscaped, keyword, meId)` の順（**エスケープ済みと生の両方**が渡る） | pg_trgm の `%` 演算子に誤ってエスケープ済みの値を渡すと類似度検索が機能しない | ★ |
+
+### 13.2 バリデーション（境界値）
+
+| # | 技法 | 入力 | 期待 | 根拠 |
+|---|---|---|---|---|
+| 144 | 境界 | `q=null` | 400 | 05 の #20 |
+| 145 | 境界 | `q="   "`（空白のみ） | トリム後0文字 → 400 | ★（トリム後に再判定） |
+| 146 | 境界 | `q` がコードポイント1文字 | 通る（`SEARCH_QUERY_MIN`） | 06 の `SEARCH_QUERY_MIN` |
+| 147 | 境界 | **`q` が絵文字50個（サロゲートペア）** | 通る。`String.length()` なら100だが、コードポイント数は50 | `codePointCount` を `length()` に戻すと通るはずのクエリが400になる | ★ |
+| 148 | 境界 | `q` がコードポイント51文字 | 400 | 06 の `SEARCH_QUERY_MAX` |
+| 149 | 境界 | `page=null` | 0として扱う | 05 の #20 |
+| 150 | 境界 | `page=-1` | 400 | 05 の #20 |
+| 151 | 境界 | `page` に上限は無い（`page=100000`） | 400にならない（`totalElements=0` なら空ページで返る） | ★（意図的に上限を設けていない） |
+| 152 | 境界 | `size=null` | 既定値20 | 06 の `SEARCH_SIZE_DEFAULT` |
+| 153 | 境界 | `size=0` | 400 | 06 の `SEARCH_SIZE_MAX` |
+| 154 | 境界 | `size=50` | 通る | 06 の `SEARCH_SIZE_MAX` |
+| 155 | 境界 | `size=51` | 400 | 06 の `SEARCH_SIZE_MAX` |
+
+### 13.3 ページング・N+1回避
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 156 | 分岐 | **`countSearchUsers` が0件** | `searchUsers` を**呼ばない**。空の `OffsetPage` を返す | 0件確定後に無駄な検索クエリが飛ぶ | ★（早期リターン） |
+| 157 | 同値 | `page=2, size=20` | `searchUsers` に渡る offset が **40**（`page * size`） | ページ計算を誤ると重複・欠落が起きる | 05 の #20 |
+| 158 | 同値 | 検索結果が空でない | `isMe` は常に `false`（`UserListItem.fromSearchRow` の仕様） | 自分自身が検索結果に混ざる | 05 の #20（SQL側で `id <> meId`） |
+| 159 | 同値 | `totalElements=0` だが `rows` が空でない（理論上ありえないが） | 到達しない（#156のガードで先に空返し） | — | ★（ガードの位置確認） |
+| 160 | 同値 | ページが空（0件） | `findFollowedUserIds` を**呼ばない**（N+1回避） | — | 04 の 6.6、D-38 |
+
+### 13.4 分岐網羅の確認（ホワイトボックス視点）
+
+| メソッド | 分岐 | ケース |
+|---|---|---|
+| `search` | q不正 / page不正 / size不正 / 総件数0 / 正常 | #144#148 / #150 / #153#155 / #156 / #157 |
+| `escapeLikePattern` | `\` / `%` / `_` それぞれの置換、複合 | #139〜#142 |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 14. Service層（AuthService）
+
+対象: [AuthService.java](../backend/src/main/java/com/example/snstimeline/auth/AuthService.java)
+テストクラス: `auth/AuthServiceTest`
+
+### 14.1 仕様 — 認証失敗を区別しない設計
+
+ログイン失敗時、「メールアドレスが存在しない」と「パスワードが違う」を**同じ401**にする
+（[06_non_functional.md](06_non_functional.md) 3.1）。アカウントの存在を推測させないため。
+
+`Optional<User>.filter(...)` を使うことで、**メールが見つからない場合は `passwordEncoder.matches`
+自体が呼ばれない**（`Optional.empty()` に対する `filter` は述語を評価しない）。
+この「呼ばれない」ことまで検証できるのがMockitoの強み。
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 161 | 同値 | メールアドレスが存在しない | 401 `INVALID_CREDENTIALS`。`passwordEncoder.matches` を**呼ばない** | — | 06 の 3.1 |
+| 162 | 同値 | メールは存在するがパスワードが違う | 401 `INVALID_CREDENTIALS`。`passwordEncoder.matches` は**呼ばれる**（引数は `(生パスワード, ハッシュ)` の順） | 引数順が逆だとBCryptの比較が常に失敗/成立する | 06 の 3.1 |
+| 163 | 同値 | メール・パスワードともに正しい | `issueTokens` の結果を返す | — | 05 の #2 |
+
+### 14.2 新規登録 — 重複判定の優先順位
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 164 | 表 | メール・ユーザー名とも既存 | 409 `EMAIL_ALREADY_EXISTS`（**メールが優先**）。`existsByUsernameIncludingDeleted` 到達前に確定 | エラーメッセージがユーザーの意図と食い違う | ★（コード上の判定順） |
+| 165 | 表 | メールのみ既存 | 409 `EMAIL_ALREADY_EXISTS` | — | 05 の #1 |
+| 166 | 表 | ユーザー名のみ既存 | 409 `USERNAME_ALREADY_EXISTS` | — | 05 の #1 |
+| 167 | 同値 | 事前チェックは通ったが `insert` で `DuplicateKeyException`（メッセージに `uq_users_username`） | 409 `USERNAME_ALREADY_EXISTS`（TOCTOU） | 同時登録の競合が拾えず500になる | ★（`toConflict` のフォールバック） |
+| 168 | 同値 | 同上、メッセージに制約名を含まない／`uq_users_username` 以外 | 409 `EMAIL_ALREADY_EXISTS`（フォールバック） | — | ★ |
+| 169 | 認可なし・機密 | 登録成功 | `User.forSignup` に渡る第2引数は `passwordEncoder.encode(request.password())` の**戻り値**（平文ではない） | 平文パスワードがDBに渡る重大インシデント | 06 の「パスワードは必ずBCryptでハッシュ化」（CLAUDE.md 6章） |
+| 170 | 同値 | 登録成功時の `issueTokens` の引数 | `avatarUrl=null` の `UserSummary` を渡す（新規ユーザーは画像を持たない） | — | ★ |
+
+> **#169 は本プロジェクトの必須方針（CLAUDE.md 6章）の直接的な検証。** `insert` に渡る
+> `User` オブジェクトを `ArgumentCaptor` で捕まえ、`passwordHash()` が `passwordEncoder.encode` の
+> スタブ戻り値と一致し、リクエストの生パスワードと**一致しない**ことまで確認する。
+
+### 14.3 トークン再発行・ログアウト・現在ユーザー
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 171 | 順序 | `refresh` 呼び出し | `refreshTokenService.rotate` が**先に**呼ばれ、その後 `userMapper.findById(rotated.userId())` | ローテーション前にユーザー確認すると、使い捨てトークンが2回検証に使われてしまう順序になる | ★ |
+| 172 | 同値 | **ローテーション後、対象ユーザーが論理削除済み** | 401 `INVALID_REFRESH_TOKEN`（404ではない）。**ただしローテーション自体は既に完了している**（トークンは消費済み） | 削除済みユーザーが無期限にリフレッシュし続けられる | ★ |
+| 173 | 同値 | `refresh` の正常系 | レスポンスの `refreshToken` は **`rotated.refreshToken()`（新しい方）**。入力の `refreshToken` ではない | クライアントが古いトークンを使い続け、次のリフレッシュで401になる | 05 の #4 |
+| 174 | 同値 | `logout` | `refreshTokenService.revokeAll(userId)` のみ呼ばれる。存在チェックなし・戻り値なし | — | 05 の #5 |
+| 175 | 同値 | `getMe` で対象ユーザーが論理削除済み | **404**（401ではない） | ミドルウェアの認証エラーと業務エラーが混同される | 05 の #3 |
+| 176 | 順序 | `issueTokens` 内の呼び出し順 | `createAccessToken` → `issueNewFamily` → `getAccessTokenExpiresInSeconds` の順（Java の引数評価順） | — | ★ |
+
+### 14.4 分岐網羅の確認（ホワイトボックス視点）
+
+| メソッド | 分岐 | ケース |
+|---|---|---|
+| `signup` | メール重複 / ユーザー名重複 / TOCTOU（username/その他） / 正常 | #164 / #166 / #167#168 / #163系 |
+| `login` | メールなし / パスワード違い / 正常 | #161 / #162 / #163 |
+| `refresh` | ユーザー論理削除済み / 正常 | #172 / #173 |
+| `getMe` | 対象なし / 正常 | #175 / — |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 15. Service層（RefreshTokenService / RefreshTokenRevoker）
+
+対象: [RefreshTokenService.java](../backend/src/main/java/com/example/snstimeline/auth/RefreshTokenService.java)、
+[RefreshTokenRevoker.java](../backend/src/main/java/com/example/snstimeline/auth/RefreshTokenRevoker.java)
+テストクラス: `auth/RefreshTokenServiceTest`、`auth/RefreshTokenRevokerTest`
+
+### 15.1 仕様 — 盗用検知（本章の中心）
+
+リフレッシュトークンは1回使うと無効化される（ローテーション）。**同じトークンが2回目に提示された**ということは、
+トークンが漏れて正規ユーザーと攻撃者の両方が使っている可能性が高い。どちらが正規か判別できないため、
+**そのログインに紐づく全トークン（ファミリー）を失効**させ、再ログインを強制する。
+
+```
+rotate(rawToken)
+     ↓
+① トークンが見つかるか？        ──いいえ──→ 401
+     ↓ はい
+② 使用済みか？（usedAt != null） ──はい───→ revoker.revokeFamilyInNewTransaction() → 401（盗用対応）
+     ↓ いいえ
+③ 使用可能か？（失効済み/期限切れでない） ──いいえ──→ 401（revoker は呼ばない）
+     ↓ はい
+④ markUsed が1件更新できたか？   ──いいえ──→ 401（競合。revoker は呼ばない）
+     ↓ はい
+   新しいトークンを発行（ファミリーIDは引き継ぐ）
+
+※ ②と③はどちらも最終的に401だが、revoker を呼ぶのは②だけ。
+   ここを区別できないテストは「盗用検知」を検証したことにならない。
+```
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 177 | 状態遷移 | トークンが見つからない | 401。`revoker`・`markUsed` に一切触れない | — | D-29 |
+| 178 | 状態遷移 | **使用済みトークンの再提示** | `revoker.revokeFamilyInNewTransaction(familyId, userId)` が**先に**呼ばれ、その後401（`InOrder`）。`markUsed` は呼ばれない | 盗用が検知されず、攻撃者のセッションが生き続ける | ★（本節の核心） |
+| 179 | 状態遷移 | **失効済みトークン**（`revokedAt != null`、`usedAt == null`） | 401。`revoker` は**呼ばれない** | 正常な失効（ログアウト）のたびに無関係なファミリー失効が走る | ★（#178との区別） |
+| 180 | 状態遷移 | **期限切れトークン**（`expiresAt` が過去、`usedAt == null`） | 401。`revoker` は呼ばれない | — | ★ |
+| 181 | 同値 | `markUsed` が0件更新（レース負け） | 401。`issue`（新トークンの発行）に進まない | 同時リクエストで2つの新トークンが発行される | ★（競合ガード） |
+| 182 | 同値 | 正常なローテーション | 新しいトークンの `familyId` は**元と同じ**（`UUID.randomUUID()` していない） | ログイン1回分の連鎖が追跡できなくなり、盗用検知が機能しない | ★ |
+| 183 | 形式 | 生成される生トークン | 43文字、`=`/`+`/`/` を含まない（URLセーフBase64・パディング無し） | — | ★ |
+| 184 | 機密情報 | `issue` が `refreshTokenMapper.insert` に渡す値 | `ArgumentCaptor` で捕まえた `RefreshToken.tokenHash` は**生トークンと一致しない**（SHA-256ハッシュ） | 生トークンがDBに残り、DB漏洩時にそのまま使われる | ★（CLAUDE.md 6章のログ・保存物に関する方針の類推） |
+| 185 | 同値 | `issue` が設定する `expiresAt` | `now + expirationDays`（コンストラクタで渡した日数） | — | 05 の #4 |
+| 186 | 同値 | `issueNewFamily` | 毎回**新しい** `UUID` をファミリーIDにする（`rotate` との対比） | ログイン毎にファミリーが分かれず、1つのログアウトが他のログインまで巻き込む | ★ |
+
+### 15.2 `RefreshTokenRevoker`
+
+| # | 技法 | 入力 | 期待 | 根拠 |
+|---|---|---|---|---|
+| 187 | 同値 | `revokeFamilyInNewTransaction(familyId, userId)` | `refreshTokenMapper.revokeFamily(familyId, now)` に委譲。引数順は `familyId` が先 | ★ |
+
+> **`REQUIRES_NEW`（別トランザクション）の分離自体は単体テストでは検証できない。** 呼び出しの委譲と
+> 引数順のみを確認し、トランザクション境界の検証はMapper層の結合テストの課題として `docs/11_test_design.md`
+> 20章（今後の追加予定）に記録する。
+
+### 15.3 分岐網羅の確認（ホワイトボックス視点）
+
+| メソッド | 分岐 | ケース |
+|---|---|---|
+| `rotate` | 未検出 / 使用済み / 失効済み / 期限切れ / 競合 / 正常 | #177 / #178 / #179 / #180 / #181 / #182 |
+| `issueNewFamily` | 正常のみ | #186 |
+| `revokeFamilyInNewTransaction` | 正常のみ | #187 |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 16. Service層（FileService）
+
+対象: [FileService.java](../backend/src/main/java/com/example/snstimeline/file/FileService.java)
+テストクラス: `file/FileServiceTest`
+
+### 16.1 仕様 — アップロード検証の順序（本章の中心）
+
+検証順序は「**サイズ → Content-Type → 実体の先頭バイト（マジックナンバー）**」。
+巨大なファイルをメモリに読み込む前にサイズで弾くための順序であり、**サイズ超過時は `file.getBytes()`
+自体が呼ばれない**ことまで確認できる。
+
+```
+① null / 空          ──はい──→ 400
+     ↓ いいえ
+② サイズ超過（> maxSizeBytes） ──はい──→ 413 FILE_TOO_LARGE（file.getBytes() を呼ばない）
+     ↓ いいえ
+③ Content-Type が対応形式か  ──いいえ──→ 415 UNSUPPORTED_MEDIA_TYPE
+     ↓ はい
+   file.getBytes() で実体を読む
+④ 実体の先頭バイトが Content-Type と一致するか ──いいえ──→ 415（storageService.store に到達しない）
+     ↓ はい
+   保存
+```
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 188 | 境界 | ファイルサイズが `maxSizeBytes` **ちょうど**（5MB） | 通る（`>` であり `>=` ではない） | 仕様どおりの上限ファイルが拒否される | 06 の 3.5 |
+| 189 | 境界 | ファイルサイズが `maxSizeBytes + 1`バイト | 413 `FILE_TOO_LARGE`。`file.getBytes()` を**呼ばない** | 巨大ファイルが毎回メモリに載る（メモリ枯渇） | 06 の 5.3「アップロードサイズ超過」、D-42 |
+| 190 | 同値 | `file` が `null` または空 | 400 `VALIDATION_ERROR` | — | 05 の #25 |
+| 191 | 同値 | Content-Type が `text/plain` など未対応 | 415。`readAll`（`getBytes`）に到達しない | — | 06 の 3.5 |
+| 192 | 同値 | **Content-Type は `image/png` だが実体は先頭 `FF D8 FF`（JPEGの偽装）** | 415。`storageService.store` に**一切触れない** | 拡張子/ヘッダ詐称でマルウェアが保存される | 06 の 5.3「画像のマジックバイト検証」、D-42 |
+| 193 | 同値 | 実体がPNGのマジックバイト（`89 50 4E 47 0D 0A 1A 0A`）＋ Content-Type `image/png` | 通る | — | ImageType.java |
+| 194 | 境界 | **WebP: 先頭4バイトはRIFFの正しい値だが、8バイト目からが `WEBP` でない** | 415 | ★（ファイルサイズ格納領域である4〜7バイト目をスキップして判定する仕様の回帰） |
+| 195 | 同値 | WebPの正しいマジックバイト（`RIFF` + 任意4バイト + `WEBP`） | 通る | ImageType.java |
+| 196 | 同値 | 保存時に `storageService.store` へ渡る Content-Type | **リクエストヘッダの生値ではなく `imageType.contentType()`（enumの正規値）** | `Image/PNG` のような表記ゆれがそのまま保存される | ★ |
+| 197 | 同値 | `ImageIO` が読めない実体（最小のマジックバイトのみ等） | 例外を投げず `width=null, height=null` で保存される | 画像を読めないだけでアップロード全体が失敗する | 06 の「width/heightはNULL許容」（04 の 2.7） |
+| 198 | 同値 | 正常アップロード | `fileMapper.insert` に渡る `StoredFile.uploadedBy` が呼び出し元の `meId` と一致 | 他人がアップロードした扱いになる | 05 の #25 |
+
+### 16.2 配信・所有者チェック（D-14の適用）
+
+| # | 技法 | 入力 | 期待 | 壊れると何が起きるか | 根拠 |
+|---|---|---|---|---|---|
+| 199 | 同値 | `download` で存在しない `fileId` | 404 | 05 の #26 |
+| 200 | 同値 | `download` — **所有者以外が呼んでも成功する**（画像配信は認証不要） | 200。所有者チェックのメソッドを呼ばない | 他人の投稿画像が見られなくなる（設計の意図に反する） | ★（意図的に無検査） |
+| 201 | 認可 | `assertOwnedBy` — **存在しない `fileId`** | **404**（403ではない）。`file.uploadedBy()` の比較まで到達しない | D-14の順序が崩れると、存在有無が漏れる | D-14、D-44 |
+| 202 | 認可 | `assertOwnedBy` — 存在するが他人の `fileId` | 403 | 06 の 5.3「ファイル所有者チェック」 |
+| 203 | 認可 | `assertOwnedBy` — 自分の `fileId` | 例外を投げない | 05 の #6, #19 |
+
+> **#201・#202 が「ファイル所有者チェック」の実体。** `UserService`（12章 #133〜#134）や
+> `PostService`（8章、既存）はこのメソッドを呼ぶだけなので、実際の判定ロジックはここで固める。
+
+### 16.3 分岐網羅の確認（ホワイトボックス視点）
+
+| メソッド | 分岐 | ケース |
+|---|---|---|
+| `upload` | 空 / サイズ超過 / 型未対応 / マジック不一致 / ImageIO失敗 / 正常 | #190 / #189 / #191 / #192#194 / #197 / #193#195#198 |
+| `download` | 対象なし / 正常 | #199 / #200 |
+| `assertOwnedBy` | 対象なし / 他人 / 自分 | #201 / #202 / #203 |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 17. テストが本当に落ちるかの確認（ミューテーション、11〜16章まとめ）
+
+6.6節・9.7節と同じ手順。わざと実装を壊し、対応するテストが赤くなることを確認してから元に戻した
+（`git diff --stat -- backend/src/main/java/` で production code の差分が0行であることを確認済み）。
+
+| # | 対象 | 壊した内容 | 想定 | 結果 |
+|---|---|---|---|---|
+| 1 | `FollowService.follow` | `if (!followMapper.exists(...))` を `if (true)` に（冪等性ガードを外す） | #101 が落ちる | ✅ #101 を含む複数件が赤 |
+| 2 | `FollowService.follow` | 自己チェックを存在チェックの**後ろ**へ移動 | #107 が落ちる（400のはずが404になる） | ✅ #107 のみが赤 |
+| 3 | `UserService.getProfile` | `followMapper.countFollowing(userId)` と `countFollowers(userId)` の呼び出しを入れ替え | #121 が落ちる | ✅ #121 のみが赤 |
+| 4 | `UserSearchService.escapeLikePattern` | `.replace("%", "\\%")` を削除 | #139・#142 が落ちる | ✅ 該当ケースが赤 |
+| 5 | `UserSearchService.escapeLikePattern` | バックスラッシュ置換を`%`/`_`の**後**に移動 | #142 が落ちる | ✅ #142 のみが赤 |
+| 6 | `AuthService.signup` | メールチェックとユーザー名チェックの順序を入れ替え | #164 が落ちる（エラーコードが逆になる） | ✅ #164 のみが赤 |
+| 7 | `RefreshTokenService.rotate` | `isUsed()` 分岐の `revoker.revokeFamilyInNewTransaction(...)` 呼び出しを削除 | #178 が落ちる（401は返るが revoker が呼ばれない） | ✅ #178 のみが赤（**401という結果だけを見るテストでは検出できないことを実証**） |
+| 8 | `FileService.upload` | `imageType.matches(content)` の判定を削除（常にtrue扱い） | #192 が落ちる | ✅ #192 を含む複数件が赤 |
+| 9 | `FileService.upload` | サイズ判定を `>` から `>=` に変更 | #188 が落ちる（ちょうど5MBが拒否される） | ✅ #188 のみが赤 |
+| 10 | `FileService.assertOwnedBy` | 存在チェックと所有者チェックの順序を入れ替え | #201 が落ちる（他人のIDで404ではなく403になるケースが検出できなくなる） | ✅ #201 のみが赤 |
+
+**10個とも検出できた。** 特に#7は、**「最終的な結果（401）だけを見るテスト」では原理的に検出できない
+バグ**（盗用検知の失敗）を、`verify(revoker)` という「何が呼ばれたか」の検証で初めて捉えられることを示している。
+このプロジェクトのService層テストがMockitoの呼び出し検証を多用している理由そのものが、ここで実証された。
+
+確認後、実装はすべて元に戻した。
+
+
+## 18. 参照
 
 | 文書 | 内容 |
 |---|---|
