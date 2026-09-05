@@ -126,11 +126,23 @@
 		</dependency>
 
 		<!-- ===== テスト =====
-		     JUnit 5 / Mockito / AssertJ / MockMvc をまとめて入れる。
-		     バージョンは spring-boot-starter-parent が管理するため指定しない -->
+		     JUnit 5 / Mockito / AssertJ をまとめて入れる。
+		     バージョンは spring-boot-starter-parent が管理するため指定しない。
+		     MockMvc の自動設定は Boot 4 で別artifactに分かれた（下の spring-boot-webmvc-test） -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- @AutoConfigureMockMvc（Controller層の結合テスト）。
+		     Boot 4 では技術ごとのテスト自動設定が spring-boot-*-test に分割され、
+		     MockMvc の自動設定は starter-test に含まれなくなった
+		     （spring-boot-starter-web → -webmvc の改名と同じ流れ）。
+		     これを入れないと @AutoConfigureMockMvc がコンパイルエラーになる -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
