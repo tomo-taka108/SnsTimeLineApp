@@ -98,6 +98,30 @@ public class TestFixtures {
     return id;
   }
 
+  /**
+   * {@code created_at} を明示してコメントを作る。{@link #postAt} と対になる。
+   *
+   * <p>コメント一覧のカーソルは投稿とは逆の<b>昇順</b>（{@code ORDER BY c.created_at ASC, c.id ASC}）のため、 タイブレーカーの検証には同一
+   * {@code created_at} のコメントを作る必要がある。
+   *
+   * <p><b>呼び出し側は {@code truncatedTo(ChronoUnit.MICROS)} した値を渡すこと</b>（{@link #postAt} と同じ理由）。
+   */
+  public long commentAt(long postId, long userId, String body, OffsetDateTime createdAt) {
+    long id =
+        jdbc.sql(
+                """
+                INSERT INTO comments (post_id, user_id, body, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?) RETURNING id
+                """)
+            .params(postId, userId, body, createdAt, createdAt)
+            .query(Long.class)
+            .single();
+    jdbc.sql("UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?")
+        .param(postId)
+        .update();
+    return id;
+  }
+
   /** いいねを1件作り、{@code posts.like_count} を +1 する。 */
   public void like(long postId, long userId) {
     jdbc.sql("INSERT INTO likes (post_id, user_id) VALUES (?, ?)").params(postId, userId).update();

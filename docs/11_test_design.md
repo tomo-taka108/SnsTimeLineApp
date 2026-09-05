@@ -286,8 +286,12 @@
 | 6 | Service層（LikeService の冪等性） | **状態遷移** | **実装完了**（12ケース） |
 | 8〜9 | Service層（PostService / CommentService） | 状態遷移・デシジョンテーブル | **実装完了**（34ケース） |
 | 11〜17 | Service層（Follow / User / UserSearch / Auth / RefreshToken / File） | 状態遷移・デシジョンテーブル | **実装完了**（104ケース、Service層完走） |
-| 19 | Mapper層（論理削除・カーソル） | 境界値 | 未着手 |
-| 20 | フロントエンド（validation / datetime） | 境界値 | 未着手 |
+| 19 | **Mapper層**（論理削除・カーソル・行マッピング） | 境界値・実SQL | **実装完了**（70テスト） |
+| 20 | **Controller層**（認証・認可・エラーJSON） | 表・実HTTP | **実装完了**（41テスト） |
+| 23 | フロントエンド（validation / datetime） | 境界値 | 未着手 |
+
+> **19〜20章で必須テスト項目（[06_non_functional.md](06_non_functional.md) 5.3）は 14/14 を達成した。**
+> 残り2項目（論理削除の除外・カーソルページネーション）は実SQLでしか検証できなかったもの。
 
 ---
 
@@ -1068,7 +1072,274 @@ rotate(rawToken)
 確認後、実装はすべて元に戻した。
 
 
-## 18. 参照
+## 19. Mapper層（結合テスト）
+
+対象: `backend/src/main/resources/mapper/*.xml`
+テストクラス: `post/PostMapperTimelineTest`, `post/PostMapperTest`, `post/LikeMapperTest`,
+`post/PostImageMapperTest`, `comment/CommentMapperTest`, `follow/FollowMapperTest`,
+`user/UserMapperTest`, `user/UserMapperSearchTest`
+
+### 19.0 なぜ層が変わると道具が変わるのか
+
+6〜17章（Service層）はMapperをモックしていた。そのため
+**「SQLに `deleted_at IS NULL` が書かれているか」は原理的に検証できなかった。**
+ここから実DB（Testcontainers）を使う。
+
+| | Service層（6〜17章） | **Mapper層（19章）** | **Controller層（20章）** |
+|---|---|---|---|
+| 何を差し替えるか | Mapperをモック | **何も差し替えない** | **何も差し替えない** |
+| 検証対象 | 呼び出しの有無・順序 | **SQLが返す実データ** | **HTTPステータス・JSON形状** |
+| 道具 | Mockito | Testcontainers + `TestFixtures` | MockMvc + `TestAuth` |
+| DBが要るか | 不要 | **必要**（Docker） | **必要**（Docker） |
+
+**本章で必須テスト項目（[06_non_functional.md](06_non_functional.md) 5.3）の残り2項目を達成する。**
+
+| 項目 | 対応ケース |
+|---|---|
+| **論理削除の除外** | #204〜#211（Mapper側）＋ #292・#303（Controller側で404とTL非表示） |
+| **カーソルページネーション** | #212〜#216・#233 |
+
+### 19.1 論理削除の除外（#204〜#211）
+
+| # | 対象 | 入力 | 期待 | 壊れると何が起きるか |
+|---|---|---|---|---|
+| **204** | `findTimeline` | 投稿を論理削除 | 一覧に出ない | **削除した投稿が全ユーザーのTLに出続ける**（本PRで最重要） |
+| 205 | `findTimeline` | 投稿者を論理削除 | 一覧に出ない | 退会ユーザーの投稿が残る |
+| 206 | `findByUserId` | 投稿を論理削除 | 一覧に出ない | 別SQLなので独立に確認が要る |
+| 207 | `findByUserId` | 投稿者を論理削除 | 空になる | 同上 |
+| 208 | `findRowById` | 投稿を論理削除 | `Optional.empty()` | 詳細取得が200を返す（#292の根拠） |
+| 209 | `findById` | 投稿を論理削除 | `Optional.empty()` | 削除済み投稿を再削除でき、カウンタが壊れる |
+| 210 | `findRowById` | 投稿者を論理削除 | `Optional.empty()` | usersとJOINしているため |
+| 211 | `findById` | 投稿者を論理削除 | **取得できる（仕様）** | #210との非対称は意図的。ここにJOINを足すとD-14の順序が崩れる |
+
+### 19.2 カーソルのタイブレーカー（#212〜#216）
+
+`ORDER BY p.created_at DESC, p.id DESC` と行値比較 `(created_at, id) < (?, ?)` の組み合わせ。
+
+| # | 入力 | 期待 | 壊れると何が起きるか |
+|---|---|---|---|
+| **212** | 同一 `created_at` 2件を1件ずつページング | 重複も欠落もない | ページ境界で投稿が消える |
+| **213** | 同一 `created_at` 3件をページサイズ1で最後まで辿る | 全件ちょうど1回ずつ | 境界を同時刻グループの内側に置く |
+| **213b** | 同一 `created_at` 8件をページサイズ3で辿る | 全件ちょうど1回ずつ | 同時刻グループがページより大きい状況 |
+| 214 | 時刻混在4件 | `created_at DESC, id DESC` の順 | 並び順の破壊 |
+| 215 | カーソルに指定した投稿自身 | 次ページに含まれない（`<` であって `<=` ではない） | 毎ページ同じ投稿が再登場する |
+| 216 | `findByUserId` で同一 `created_at` 2件 | 重複も欠落もない | 別SQLなので独立に確認 |
+
+> **`postAt` を使う理由。** `@Transactional` 内では `now()` がトランザクション開始時刻に固定されるため、
+> 普通に `post()` を2回呼んでも `created_at` は同じになる。ただしそれは「たまたま同じ」であって
+> 意図の表明ではない。`created_at` を明示する `postAt` を使い、**マイクロ秒に丸める**
+> （`OffsetDateTime.now()` はナノ秒、PostgreSQL と `CursorCodec` はマイクロ秒）。
+
+> **カーソルは実物の `CursorCodec` を往復させる。** 往復させないとSQLだけのテストになり、
+> コーデックがマイクロ秒を落とす回帰を検出できなくなる。
+
+### 19.3 行マッピングの完全性（#223・#235・#242・#270）
+
+MyBatis はカラム名の誤りを起動時に検知しない（D-25）。全フィールドを投入値と突き合わせる。
+
+| # | 対象 | 特記事項 |
+|---|---|---|
+| **223** | `PostRow`（11項目） | いいね・コメントを1件ずつ作り、カウンタが0でない状態で確認する |
+| 235 | `CommentRow`（8項目） | |
+| **242** | `FollowRow`（8項目） | **`followCreatedAt` と `userCreatedAt` が異なる値であること**まで確認する。非nullチェックだけでは別名の入れ替えを検出できない |
+| 270 | `UserSearchRow`（5項目） | `email` / `passwordHash` を含まないことは型で保証される |
+
+### 19.4 論理削除の扱いが list と count で異なる箇所（Issue #44）
+
+**現状の挙動を固定している。** テストは緑のまま。実装を直したときに期待値を反転させる。
+
+| # | 内容 | 現状 | 利用者から見た症状 |
+|---|---|---|---|
+| **230** | `countNewer` は users とJOINしない | 退会者の投稿を**数える** | 「新着1件」と出るのに押しても何も無い |
+| **246** | `countFollowing` に退会除外が無い | 退会者を**数える** | 「フォロー中 1」なのに一覧が空 |
+| 247 | `countFollowers` も同様 | 同上 | 同上 |
+| 239 | `findByPostId` が親投稿の `deleted_at` を見ない | コメントを**返す** | 現状 Service が先に404にするため実害なし |
+
+### 19.5 その他の主要ケース
+
+| # | 対象 | 内容 |
+|---|---|---|
+| 225 / 240 | `softDelete` | 2回目は0件（`PostService` が競合検知に使う戻り値） |
+| 227 / 241 | `softDelete` / `updateBody` | 削除では `edited_at` を立てない（「編集済み」バッジ） |
+| 229 / 254 | カウンタ | 0から減らすと **CHECK制約違反**（最後の砦） |
+| 233 | `findByPostId` | **昇順**カーソル（投稿とは逆向き）。コピペで向きを間違えると2ページ目が常に空になる |
+| **257 / 258** | `updateProfile` | **「未送信」と「明示的null」の区別**（後述の21章 #5 参照） |
+| 264 | `existsBy*IncludingDeleted` | 退会者も含めて `true`（意図的な逸脱） |
+| **265〜267** | 検索のLIKE | エスケープ済みの `\%` が全件列挙にならない |
+| 268 / 269 | 検索 | `searchUsers` と `countSearchUsers` が常に一致する |
+| 249 / 256 / 275 | 一括取得 | **空リストは `IN ()` で構文エラー**。ガードは呼び出し側の責務 |
+
+### 19.6 分岐網羅の確認（ホワイトボックス視点）
+
+| Mapper | 主な分岐 | ケース |
+|---|---|---|
+| `PostMapper` | 論理削除 / カーソル有無 / タブ / カウンタ | #204〜#232 |
+| `CommentMapper` | 論理削除 / カーソル / 更新系 | #233〜#241 |
+| `FollowMapper` | 一覧 / 件数 / 一括取得 | #242〜#249 |
+| `LikeMapper` | 登録解除 / カウンタ / 一括取得 | #250〜#256 |
+| `UserMapper` | 部分更新の3状態 / 論理削除 / 検索 | #257〜#271 |
+| `PostImageMapper` | 並び順 / JOIN / 空リスト | #272〜#275 |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 20. Controller層（結合テスト）
+
+対象: `backend/src/main/java/com/example/snstimeline/**/[A-Z]*Controller.java`、`config/SecurityConfig`、`common/GlobalExceptionHandler`
+テストクラス: `auth/SecurityFilterChainTest`, `common/ErrorResponseShapeTest`,
+`post/PostControllerTest`, `post/TimelineControllerTest`, `comment/CommentControllerTest`,
+`user/UserControllerTest`, `file/FileControllerTest`
+
+### 20.0 この層でしか検証できないもの
+
+**401 / 403 はフィルタチェーンの中で起きるため `GlobalExceptionHandler` では捕捉できない**
+（そのJavadocに明記されている）。実際にHTTPリクエストを流して初めて確認できる。
+
+`@SpringBootTest` + `MockMvc` で、**実DB＋実Service＋実Mapper＋実セキュリティチェーン**を通す。
+
+> **認証済みにするには `TestAuth.as(userId)` を使う。`@WithMockUser` は使えない。**
+> コントローラは `@AuthenticationPrincipal AuthPrincipal` を受け取るため、`UserDetails` を積むと
+> null が注入されて 401/403 ではなく **500** になる。原因が分かりにくい形で失敗する。
+
+> **日本語の検証は `jsonPath(...).value(...)` を使う。**
+> `getContentAsString()` は charset が無いと ISO-8859-1 に落ちて文字化けする。
+
+### 20.1 未認証（401）と permitAll の範囲
+
+| # | 内容 | 期待 | 壊れると何が起きるか |
+|---|---|---|---|
+| **276** | 未認証でTL取得 | 401 `UNAUTHENTICATED`、`errors` キーが**存在しない** | `.exceptionHandling(...)` が外れるとSpring既定のHTMLが返り、契約が丸ごと壊れる |
+| 277 | 未認証＋本文不正 | **401**（400ではない） | 認証がバリデーションより先。逆だと未認証の相手に検証規則を教えてしまう |
+| 278 / 279 | `/auth/me` / `/auth/logout` | 401 | logout は refresh と違い認証が要る |
+| 280 | `/auth/signup` | 201（401にならない） | permitAll が外れると誰も登録できない |
+| **281** | `GET /files/{id}` / `POST /files` | 配信は認証不要 / アップロードは401 | `<img src>` は Authorization を送れないため配信のみ公開 |
+| **281b** | `DELETE /files/{id}` | 401 | **permitAll は GET 限定**。`HttpMethod.GET` の修飾が外れるとアップロードまで公開される |
+
+### 20.2 認可（403 / 404）と D-14 の順序
+
+| # | 内容 | 期待 |
+|---|---|---|
+| **282** | 他人の投稿を削除 | 403 `FORBIDDEN` |
+| 283 | 自分の投稿を削除 | 204 |
+| **284** | 存在しない投稿を削除 | **404**（403ではない） |
+| **292** | 削除済み投稿のGET | **404**（必須項目「論理削除の除外」の後半） |
+| 293 | 削除済み投稿のPATCH（所有者本人） | 404 |
+| 294 | 同じ投稿を2回削除 | 1回目204、2回目**404** |
+| **295** | 他人の `fileId` を添付 | **403**（必須項目「ファイル所有者チェック」） |
+| **296** | 存在しない `fileId` を添付 | **404**（#295と対。順序が逆だと存在が漏れる） |
+
+> **403には出所が2つある。** `RestAccessDeniedHandler`（フィルタチェーン由来）と
+> `GlobalExceptionHandler`（`ForbiddenException` 由来）。本章で検証しているのは**後者**。
+> `SecurityConfig` はロール制御を持たない（`anyRequest().authenticated()` のみ）ため、
+> **前者は現状到達不能**。
+
+### 20.3 エラーレスポンスのJSON契約
+
+| # | 内容 | 期待 | 壊れると何が起きるか |
+|---|---|---|---|
+| **285** | `timestamp` | `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`（ミリ秒なし） | `isNotNull()` では検出できない。正規表現でのみ捕まる |
+| 286 | `path` | リクエストURIそのもの | |
+| 287 | `status` / `code` | HTTPステータスと一致 / enum名 | クライアントの分岐キーが壊れる |
+| **288** | バリデーションエラー | `errors` が**配列として存在** | #276の「存在しない」と両側から `NON_NULL` を固定 |
+| **289** | 必須パラメータ `q` の欠落 | 400 | ハンドラが無いと**500になる** |
+| 290 / 291 | パス変数の型不一致 / 壊れたJSON | 400 | 同上 |
+
+### 20.4 必須テスト項目の端から端までの確認
+
+| # | 必須項目 | 内容 |
+|---|---|---|
+| **298** | いいねの冪等性 | 2回いいねしてもカウンタは1（**実DBのUNIQUE制約込みで初めての検証**） |
+| **299** | いいね解除の冪等性 | 未いいねの解除でも `ck_posts_like_count` に触れない |
+| **300** | 投稿削除時のカウンタ | 投稿を削除しても `comment_count` は変わらない（非対称ルール） |
+| **309** | コメント削除時のカウンタ | コメント削除で `comment_count` が -1 |
+| **313** | 自己フォローの拒否 | 400 `SELF_FOLLOW_NOT_ALLOWED` |
+| **314 / 315** | フォローの冪等性 | 2回フォローしてもフォロワー数は1 |
+| **316** | プロフィールのカウント算出 | 3つのカウントが実データと一致（D-36） |
+| **321** | 画像のマジックバイト検証 | `image/png` を名乗るテキストは415 |
+| **322** | 画像配信の認証要否 | 認証不要＋`Cache-Control: max-age=31536000, public, immutable` |
+
+### 20.5 その他
+
+| # | 内容 |
+|---|---|
+| **303** | 削除済み投稿がTLのレスポンスに出ない（#204のHTTP経由での確認） |
+| **304** | **投稿0件でも200で空配列**（`IN ()` ガードが効いていること） |
+| **305** | カーソルがHTTPのクエリ文字列を往復できる（URLセーフBase64の意義） |
+| 306 / 307 | 壊れたカーソルは400 / `limit` 上限50 |
+| 308 | `new-count` は `sinceId` 必須 |
+| 312 | コメント一覧は古い順 |
+| **317** | `bio` の「未送信」と「明示的null」の区別（#257・#258 のHTTP経由での確認） |
+| 318 | `avatarFileId` が数値以外なら400 |
+
+**分岐網羅（C1）を達成している。**
+
+---
+
+## 21. テストが本当に落ちるかの確認（ミューテーション、19〜20章）
+
+6.6節・9.7節・17章と同じ手順。**確認後、実装はすべて元に戻した**
+（`git diff --stat -- backend/src/main/` が0行であることを確認済み。`pom.xml` のテスト依存追加のみ意図的に残す）。
+
+| # | 対象 | 壊した内容 | 結果 |
+|---|---|---|---|
+| 1 | `PostMapper.xml` `findTimeline` | `WHERE activeOnly` を `WHERE TRUE` に | ✅ **#204・#303 が赤**（必須項目そのもの） |
+| 2 | `PostMapper.xml` `findTimeline` | `ORDER BY` から `, p.id DESC` を削除 | ⚠️ **緑のまま**（後述） |
+| 3 | `PostMapper.xml` `findTimeline` | 行値比較を `p.created_at < ?` に退化 | ✅ **#212・#213・#213b の3件が赤** |
+| 4 | `PostMapper.xml` `rowColumns` | 別名にタイポ（`author_dispay_name`） | ⚠️ **緑のまま**（後述） |
+| 4b | `PostMapper.xml` `rowColumns` | `display_name` の代わりに `username` を別名に割り当て | ✅ **#223 が赤**（`"alice"` が返った） |
+| **5** | `UserMapper.xml` `updateProfile` | `<if test="bioProvided">` → `<if test="bio != null">` | ✅ **#257・#317 が赤。`UserServiceTest` は緑のまま** |
+| 6 | `UserMapper.xml` `searchWhere` | `ESCAPE '\'` を削除 | ⚠️ **緑のまま**（後述） |
+| 6b | `UserSearchService` | Java側の `escapeLikePattern` を無効化 | ✅ `UserSearchServiceTest` の4件が赤 |
+| 7 | `SecurityConfig` | `/files/*` から `HttpMethod.GET` 修飾を削除 | ✅ **#281b が赤**（#281 だけでは検出できず、追加した） |
+| 8 | `ErrorResponse.of` | `.truncatedTo(SECONDS)` を削除 | ✅ **#285 が赤** |
+| 9 | `GlobalExceptionHandler` | 必須パラメータのハンドラを無効化 | ✅ **#289・#308 が赤**（400が500になる） |
+| 10 | `PostService.likedPostIdsOf` | 空リストのガードを削除 | ✅ **#304 が赤**（空TLが500になる） |
+
+### 21.1 特筆すべき結果
+
+**#5 が本章で最も重要。** 同じバグに対して:
+
+| テスト層 | 結果 | 理由 |
+|---|---|---|
+| `UserServiceTest`（Service層） | **緑のまま** | Mapperをモックしているため、`bioProvided` と `bio != null` のどちらでも**渡す引数が同じ**になる |
+| `UserMapperTest` #257（Mapper層） | ✅ 赤 | 実SQLを流すため、SET句が出るかどうかで結果が変わる |
+| `UserControllerTest` #317（Controller層） | ✅ 赤 | 同上 |
+
+**Service層の単体テストが構造的に検出できないバグが実在する**ことの実証であり、
+この層のテストを書く理由そのものになっている。
+
+### 21.2 ミューテーションで判明した「テストで固定できないもの」
+
+**#2（ORDER BY のタイブレーカー削除）と #4（別名のタイポ）は緑のままだった。**
+これは検証不足ではなく、**そもそもテストで固定できない性質**だと分かった。記録しておく。
+
+**#2 — ページングを実際に守っているのは行値比較の方。**
+`ORDER BY` から `, p.id DESC` を外しても、`WHERE (created_at, id) < (?, ?)` が残っていれば
+取りこぼしは起きない（#3 で行値比較を壊すと3件が赤くなることが逆に証明している）。
+`ORDER BY` のタイブレーカーは「同時刻内の並びを決定的にする」役割だが、
+**並び順そのものは PostgreSQL の実行計画に左右されるためテストで安定して固定できない**
+（実際、`@Transactional` 内の未コミット行と、コミット済みデータの `EXPLAIN` とで並びが異なった）。
+したがってテストの検証対象は**「取りこぼしの無さ」**にした。
+
+**#4 — record への割り当ては位置ベースで、別名のタイポは吸収される。**
+`author_display_name` を `author_dispay_name` にしても `PostRow` は壊れなかった。
+MyBatis が record をコンストラクタ経由で**列の順序どおりに**組み立てるため。
+一方 #4b のように**別の列を割り当てる**と検出できる（`"aliceの表示名"` のはずが `"alice"` になった）。
+つまり #223 が守っているのは「列の取り違え」であって「別名のタイポ」ではない。
+
+**#6 — PostgreSQL は既定でバックスラッシュを LIKE のエスケープ文字として扱う。**
+`ESCAPE '\'` を消しても挙動が変わらなかった（`SELECT 'alice' LIKE '%\%%'` は句の有無に関わらず false）。
+情報漏洩を実際に防いでいるのは **Java側の `escapeLikePattern`** であり（#6b で4件が赤）、
+SQL側の `ESCAPE '\'` は `standard_conforming_strings` の設定変更に備えた保険という位置づけになる。
+
+> **「緑のまま」を放置せず、なぜ緑なのかを突き止めることに価値がある。**
+> 3件とも「テストが弱い」のではなく「守っているものが想像と違った」という結論になり、
+> 何が本当の防御線なのかが分かった。
+
+---
+
+## 22. 参照
 
 | 文書 | 内容 |
 |---|---|
