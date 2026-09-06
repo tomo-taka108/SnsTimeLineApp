@@ -1307,6 +1307,64 @@ ORDER BY
 
 ---
 
+## D-57 フロントエンドのテスト基盤に Vitest + React Testing Library を採用する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-06 |
+| **論点** | フロントエンド（React 19 / Vite 8 / TypeScript）に自動テストを導入するにあたり、テストランナーと DOM 環境を何にするか。バックエンドは JUnit 5 で確立しているが、フロントには一切のテスト基盤が無い |
+| **選択肢** | **A. Vitest + jsdom + React Testing Library** / B. Jest + jsdom + React Testing Library / C. Playwright などのE2Eのみ |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**理由**
+
+- **B（Jest）は Vite プロジェクトでは設定が重い。** Jest は CommonJS 前提で、ESM・TypeScript・`import.meta.env` のいずれもそのままでは動かない。`babel-jest` か `ts-jest` と `transform` の設定、`import.meta` を書き換えるプラグインが必要で、**`vite.config.ts` とは別に「もう一つのビルド設定」を維持する**ことになる。
+- **A は `vite.config.ts` をそのまま使う。** Vitest は Vite のトランスフォームをそのまま利用するため、**設定の二重管理が発生しない**。`import.meta.env` も追加設定なしで動く。API（`describe` / `it` / `expect` / `vi.fn`）は Jest とほぼ同じで、Web上のJestの情報がそのまま応用できる。
+- **C（E2Eのみ）では境界値を確かめられない。** 「ユーザー名30文字は通り31文字は弾かれる」を実ブラウザで1件ずつ確かめるのは現実的でなく、実行も遅い。一方でE2Eにしかできない領域（[11_test_design.md](11_test_design.md) 23.8 #10）もあるため、将来の追加を否定するものではない。
+- **jsdom を採用する（`happy-dom` ではない）。** `happy-dom` は高速だが実装の網羅度が劣り、動かないAPIに当たったときに「自分のコードが悪いのか環境が悪いのか」の切り分けが増える。フロントのテストは1秒未満で終わる規模のため、速度差は判断材料にならない。
+
+> **`@testing-library/react` 16 は `@testing-library/dom` を自前で持たない。** peerDependencies に移されたため、**明示的に devDependencies へ追加しないとテストが1本も起動しない**（`Cannot find module '@testing-library/dom'`）。Web上のサンプルの多くは v13 以前のもので、この依存が書かれていない。[D-54](#d-54-テスト用dbに-h2-ではなく-testcontainerspostgres16-を使う) の Testcontainers 2.x と同じ落とし穴。
+
+> **`npm test` は `vitest run` にする。** 素の `vitest` はウォッチモードに入り、[quality-check](../.claude/skills/quality-check/SKILL.md) の Step 6 から呼ぶと**終了せずに固まる**。
+
+**代償**
+
+- devDependencies が5つ増える（`vitest` / `@vitest/coverage-v8` / `jsdom` / `@testing-library/react` / `@testing-library/dom` / `@testing-library/jest-dom`）。[frontend/README.md](../frontend/README.md) の依存最小方針は**実行時依存についての方針**であり、開発時依存は対象外と整理する。
+- **本PRのスコープはフックとコンポーネントを含まない**（[11_test_design.md](11_test_design.md) 5章 節24）。fake timers と `fetch` 待ちの相性問題、jsdom に `IntersectionObserver` が無い制約があるため、道具の使い方を整理してから着手する。
+
+**影響範囲**: [frontend/package.json](../frontend/package.json) / [frontend/vite.config.ts](../frontend/vite.config.ts) / `frontend/src/setupTests.ts` / [frontend/.oxlintrc.json](../frontend/.oxlintrc.json) / [.claude/skills/quality-check/SKILL.md](../.claude/skills/quality-check/SKILL.md)
+
+---
+
+## D-58 テストコードを `src/` 配下に置き、本番コードと同じ型検査・静的解析に掛ける
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-06 |
+| **論点** | テストファイルをどこに置き、型検査（`tsc -b`）と oxlint の対象に含めるか。`tsconfig.app.json` は `include: ["src"]` のため、置き場所が検査範囲を直接決める |
+| **選択肢** | **A. `src/` にソースと同階層で置き（`foo.test.ts`）、型検査・lint の対象に含める** / B. `src/__tests__/` にまとめ、`tsconfig` から除外する |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**理由**
+
+- **A はテストコードの型エラーもビルドで落ちる。** `npm run build`（`tsc -b`）が `src/` 全体を検査するため、モックの型が実装とずれた時点で気づける。**型が合わないテストは、実装と合っていないテストである。**
+- **B は「もう一つのディレクトリ構造」を生む。** `src/pages/timeline/useTimeline.ts` に対して `src/__tests__/pages/timeline/useTimeline.test.ts` を維持することになり、ファイルを動かすたびに2箇所直す。バックエンドは `src/test/java/.../post/LikeServiceTest.java` と本体が同じパッケージ構造の鏡像になっているが、これはJavaのパッケージ規約による制約であり、TypeScript にその制約は無い。**「対象の隣にテストがある」という同じ目的を、より低コストで実現できる。**
+- **`vite build` にテストは含まれない。** エントリ（`index.html` → `main.tsx`）から到達しないため、バンドルサイズには影響しない。
+- **`globals: true` を使わず、`describe` / `it` / `expect` / `vi` は明示的に import する。** `globals` を使うには `tsconfig.app.json` の `types` に `vitest/globals` を足す必要があり、**本番コードのビルド設定にテスト専用の型が混ざる**。明示 import なら設定変更が不要で、どのAPIがどこから来たかも読んで分かる。
+- **oxlint はテストファイルも対象にする。** `ignorePatterns` は追加せず、`react/only-export-components` のみ `overrides` で無効化する。
+
+**代償**
+
+- **ミューテーションテスト後の復元確認（[11_test_design.md](11_test_design.md) 23.7）で、テストファイルを除外する必要がある。** バックエンドは `git diff --stat -- backend/src/main/` で本番コードだけを見られたが、フロントは同じディレクトリに同居するため `":(exclude)frontend/src/**/*.test.ts"` を明示する。
+- `tsconfig.app.json` の `noUnusedLocals` / `noUnusedParameters` がテストにも効くため、使わないモック引数を書けない。**制約ではあるが、不要なモックを書かないことの強制でもある**と整理する。
+- **本PRでは production コードを1行も変更しない。** `PostComposer` と `ProfileEditPage` に重複している画像の形式・サイズ検証、および `Pagination.buildPages` の非公開は、いずれも「テストしやすくするための抽出」の候補だが、**テスト導入と同じPRで実装を変えると、テストが緑である理由が「元から正しかった」のか「今直したから」なのか区別できなくなる**。別Issue（#47）として起票した。
+
+**影響範囲**: `frontend/src/**/*.test.ts` / [frontend/tsconfig.app.json](../frontend/tsconfig.app.json)（**変更なし**であることの記録）/ [frontend/.oxlintrc.json](../frontend/.oxlintrc.json)
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |
