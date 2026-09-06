@@ -127,7 +127,7 @@
 <header>
   <p class="eyebrow">SnsTimeLineApp · 学習メモ</p>
   <h1>テストの考え方 — 5段階の階層と、技法の使い分け</h1>
-  <p class="lede">「どんなテストを、どの順で、何を使って書くのか」。テストを1本も書いたことがない状態から、実際に63本書くまでに理解したことを整理します。テスト実装の準備〜Stage 1（2026-09-01〜09-02）時点の内容です。</p>
+  <p class="lede">「どんなテストを、どの順で、何を使って書くのか」。テストを1本も書いたことがない状態から、単体テスト（部品・機能）と結合テスト（Mapper・Controller）を合わせて325本書くまでに理解したことを整理します。バックエンドのテスト完走（2026-09-01〜09-06）時点の内容です。</p>
 </header>
 
 <div class="toc">
@@ -193,14 +193,14 @@
       <div class="name">③ 結合テスト</div>
       <div class="meta">実DB・HTTP経由で通しで動くか（Mapper / Controller）</div>
     </div>
-    <span class="badge tag-sub">予定</span>
+    <span class="badge tag-done">✓ 111本 完了</span>
   </div>
   <div class="tier t2">
     <div>
       <div class="name">② 単体テスト（機能）</div>
       <div class="meta">いいね・フォローなどの判断ロジック（Service層 + Mockito）</div>
     </div>
-    <span class="badge tag-todo">次はここ</span>
+    <span class="badge tag-done">✓ 151本 完了</span>
   </div>
   <div class="tier t1">
     <div>
@@ -412,6 +412,39 @@ CREATE EXTENSION pg_trgm  →  <span class="ng">H2「そんな命令は知らな
   <div><b>学び：</b>「H2でテスト用DBを作る」という当初の方針は<b>考え方としては正しかった</b>。ただし手段が今回のアプリに合わなかっただけ。目的（開発用DBを汚さない）は Testcontainers のほうがより確実に果たせた。<b>手段が使えないとき、目的まで捨てなくてよい。</b></div>
 </div>
 
+<h3 class="plain">Testcontainers は「いつ」立ち上がって「いつ」消えるのか</h3>
+<p class="body">1本のテストごとに毎回コンテナを作り直すわけではありません。<b>テスト全体の実行が始まるときに1回だけ起動</b>し、<b>Mapper層・Controller層の全テストクラスがその1個を使い回し</b>、<b>実行がすべて終わったときにまとめて破棄</b>されます。</p>
+
+<pre><b>AbstractIntegrationTest</b>（全テストクラスの共通の土台）
+<span class="pmark">static</span> {
+  <span class="pmark">PostgreSQLContainer</span> container = new PostgreSQLContainer(<b>"postgres:16"</b>);
+  container.start();   <span class="ok">// ここで1回だけ Docker に本物の PostgreSQL を立てる</span>
+}</pre>
+
+<p class="body"><code>static</code> ブロックは「このクラスが最初に使われたとき、1回だけ実行される」という Java の仕組みです。これを利用して、<b>コンテナの起動を1回に抑えています</b>。もし各テストクラスが毎回コンテナを起動していたら、1クラスにつき起動だけで十数秒かかり、テスト全体がとても遅くなってしまいます。</p>
+
+<pre>テスト実行開始
+   ↓
+PostgreSQLコンテナ起動（<b>1回だけ、十数秒</b>）
+   ↓
+PostMapperTest が使う ─┐
+LikeMapperTest が使う  ├─ <span class="ok">同じ1個のコンテナを共有</span>
+PostControllerTest が使う ─┘
+   ↓
+全テスト完了
+   ↓
+<span class="ng">コンテナは明示的に stop() していない</span>
+   ↓
+「Ryuk」という掃除役のコンテナが検知して<b>自動削除</b></pre>
+
+<div class="note">
+  <div><b>Docker Desktop で実際に見える：</b>テスト実行中に Docker Desktop の Containers 画面を開くと、普段の開発用コンテナ（<code>snstimelineapp</code> / <code>db-1</code>）とは<b>別に</b>、<code>postgres:16</code> イメージから作られた一時的なコンテナが増えているのが見える。テストが終わるとそれだけが消える。</div>
+</div>
+
+<div class="note key">
+  <div><b>なぜ明示的に止めなくても平気なのか：</b>Testcontainers は「Ryuk」という監視用の小さなコンテナを裏で動かしており、<b>テストを起動したプロセスが終了したことを検知して</b>、紐づく一時コンテナを後始末する。テストがどんな終わり方（成功・失敗・強制終了）をしても、開発用DBに影響を与えず、ゴミも残らない設計になっている。</div>
+</div>
+
 
 <h2 id="s7"><span class="num">7</span>テストが本物か確かめる（ミューテーション）</h2>
 <p class="h2sub">緑になっているテストが、実は何も検証していないことがある。</p>
@@ -434,6 +467,25 @@ CREATE EXTENSION pg_trgm  →  <span class="ng">H2「そんな命令は知らな
 <div class="note key">
   <div><b>合言葉：</b>「緑だから安心」ではなく、<b>「落ちることまで確かめて初めてテストが機能する」</b>。</div>
 </div>
+
+<h3 class="plain">結合テストで分かった、もっと重要な発見</h3>
+<p class="body">Mapper層・Controller層のミューテーション（12パターン）では、単に「テストが赤くなる」以上のことが分かりました。<b>Service層の単体テスト（Mockito）では絶対に検出できないバグの存在</b>です。</p>
+
+<p class="body">プロフィール編集には「自己紹介欄を<b>明示的に空にする</b>」と「<b>そもそも触らない</b>」を区別する仕組みがあります。SQLはこう書かれています。</p>
+
+<pre>&lt;if test="<b>bioProvided</b>"&gt;   bio = #{bio}   &lt;/if&gt;
+<span class="ink-faint">-- bioProvided：値が「送られてきたか」で分岐（null かどうかではない）</span></pre>
+
+<p class="body">これを <code>&lt;if test="bio != null"&gt;</code> に書き換えるミューテーションを試すと——</p>
+
+<pre>Service層の単体テスト（Mockito）  <span class="ng">→ 緑のまま（気づかない）</span>
+Mapper層の結合テスト（実DB）      <span class="ok">→ 赤くなる（検出できた）</span></pre>
+
+<div class="note">
+  <div><b>なぜ Mockito は気づけないのか：</b>Service層のテストは「Mapper にどんな引数を渡したか」までしか見ていない。渡した後、その引数を使って<b>SQLがどう組み立てられるか</b>は、モックの外側の話になるため、原理的に見えていない。</div>
+</div>
+
+<p class="body">つまり、これまで「速いから」という理由でService層のテストを中心にしてきましたが、<b>層によって検出できるバグの種類が違う</b>ことが、実際にバグを再現させて初めて実感できました。Mapper・Controller層のテストは「念のため」ではなく、<b>Service層のテストが構造的に届かない場所</b>を埋める、別の役割を持つテストだと分かりました。</p>
 
 
 <h2 id="s8"><span class="num">8</span>つまずきポイント集</h2>
@@ -471,10 +523,11 @@ CREATE EXTENSION pg_trgm  →  <span class="ng">H2「そんな命令は知らな
 
 
 <footer>
-  <p>SnsTimeLineApp 学習メモ · 2026-09-02（テスト基盤構築〜部品の単体テスト63本 完了時点）</p>
+  <p>SnsTimeLineApp 学習メモ · 2026-09-06（バックエンドの単体テスト・結合テスト 完走時点）</p>
   <p>実際のテストケース表は <a href="../11_test_design.md">11_test_design.md</a>、
-     必ず書くべきテスト17項目は <a href="../06_non_functional.md">06_non_functional.md</a> 5.3、
-     採用理由の記録は <a href="../09_decision_log.md">09_decision_log.md</a>（D-54：Testcontainers採用 / D-55・D-56：テストの方針）を参照。</p>
+     必ず書くべきテスト14項目（14/14達成）は <a href="../06_non_functional.md">06_non_functional.md</a> 5.3、
+     採用理由の記録は <a href="../09_decision_log.md">09_decision_log.md</a>（D-54：Testcontainers採用 / D-55・D-56：テストの方針）を参照。
+     フロントエンドのテストは今後の対応。</p>
 </footer>
 
 </div>

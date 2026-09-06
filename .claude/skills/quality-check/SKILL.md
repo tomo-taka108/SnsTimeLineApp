@@ -70,15 +70,15 @@ cd backend && ./mvnw test
 | フォロー解除の冪等性 | フォローしていない状態で解除しても壊れない<br>→ `FollowServiceTest` #103〜#104 |
 | コメント削除時のカウンタ | コメントを論理削除すると `comment_count` が -1 される<br>→ `CommentServiceTest` #86 #88 |
 | 投稿削除時のカウンタ | 投稿を論理削除しても `comment_count` は変わらない（**非対称ルール**）<br>→ `PostServiceTest` #70 |
-| 論理削除の除外 | 削除済み投稿がTLに出ない、GETで404になる |
+| 論理削除の除外 | 削除済み投稿がTLに出ない、GETで404になる<br>→ `PostMapperTimelineTest` #204〜#211、`PostControllerTest` #292、`TimelineControllerTest` #303 |
 | 自己フォローの拒否 | 自分をフォローすると400（`SELF_FOLLOW_NOT_ALLOWED`）<br>→ `FollowServiceTest` #106〜#107 |
 | 他人のリソース操作 | 他人の投稿を削除すると403、存在しない投稿は404（**順序が重要**）<br>→ `PostServiceTest` #66〜#67、`CommentServiceTest` #84〜#85 |
 | プロフィールのカウント算出 | `postCount` / `followingCount` / `followerCount` が実データと一致する（非正規化していないため、D-36）<br>→ `UserServiceTest` #121 |
-| カーソルページネーション | 同一 `created_at` の投稿が2件あっても取りこぼさない |
+| カーソルページネーション | 同一 `created_at` の投稿が2件あっても取りこぼさない<br>→ `PostMapperTimelineTest` #212〜#216、`CommentMapperTest` #233 |
 | ファイル所有者チェック | 他人の `fileId` を指定した投稿が403になる<br>→ `FileServiceTest` #201〜#202、`UserServiceTest` #133〜#134 |
 | 画像のマジックバイト検証 | `.jpg` にリネームしたテキストファイルが 415 で拒否される（拡張子・Content-Typeだけを見ていないこと、D-42）<br>→ `FileServiceTest` #192〜#195 |
 | アップロードサイズ超過 | 5MB超が **500ではなく 413 `FILE_TOO_LARGE`** になる（Springのmultipart例外を捕捉できているか、D-42）<br>→ `FileServiceTest` #188〜#189 |
-| 画像配信の認証要否 | `GET /files/{id}` が**認証なしで200**、`POST /files` は認証なしで401 |
+| 画像配信の認証要否 | `GET /files/{id}` が**認証なしで200**、`POST /files` は認証なしで401<br>→ `SecurityFilterChainTest` #281・#281b、`FileControllerTest` #322 |
 | ストレージ抽象化 | `app.storage.type` を LOCAL / S3 で切り替えても、APIのレスポンス（`url` の形）が変わらない（D-40） |
 
 ---
@@ -132,4 +132,9 @@ cd frontend && npm run build                           # 型チェック＋本�
 | 5 | ログに**パスワード・JWT・メールアドレス**を出していないか | 06 の 5.2 |
 | 6 | ユーザー検索で `%` `_` を**エスケープ**しているか | 04 の 6.5 |
 | 7 | MyBatis の値の埋め込みに **`#{}` を使っているか**（`${}` は文字列置換でSQLインジェクションになる） | 06 の 3.6 / D-25 |
-| 8 | MyBatis のマッピング漏れがないか。**カラム名を誤っても起動時に検出されず、値が黙って `null` になる**（JPA の `ddl-auto: validate` に相当する安全網が無い） | D-25 |
+| 8 | MyBatis のマッピング漏れがないか。**カラムを取り違えても起動時に検出されない**（JPA の `ddl-auto: validate` に相当する安全網が無い）。Mapper層のテストで全フィールドを実データと突き合わせる（19.3節） | D-25 |
+
+> **補足（ミューテーションで判明、[11_test_design.md](../../../docs/11_test_design.md) 21.2）**:
+> record を返すSQLでは、**別名のタイポは列の順序で吸収されて壊れない**
+> （`author_display_name` → `author_dispay_name` にしても値は入る）。
+> 実際に危険なのは**別の列を割り当てる**取り違えの方で、こちらはテストで検出できる。
