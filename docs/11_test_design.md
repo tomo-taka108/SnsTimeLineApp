@@ -288,10 +288,15 @@
 | 11〜17 | Service層（Follow / User / UserSearch / Auth / RefreshToken / File） | 状態遷移・デシジョンテーブル | **実装完了**（104ケース、Service層完走） |
 | 19 | **Mapper層**（論理削除・カーソル・行マッピング） | 境界値・実SQL | **実装完了**（70テスト） |
 | 20 | **Controller層**（認証・認可・エラーJSON） | 表・実HTTP | **実装完了**（41テスト） |
-| 23 | フロントエンド（validation / datetime） | 境界値 | 未着手 |
+| 23 | **フロントエンド**（純粋関数・APIクライアント） | 境界値・デシジョンテーブル・**呼び出し回数の検証** | **実装完了**（91ケース） |
+| 24 | フロントエンド（フック・コンポーネント） | 非同期・**RTL** | 未着手 |
 
 > **19〜20章で必須テスト項目（[06_non_functional.md](06_non_functional.md) 5.3）は 14/14 を達成した。**
 > 残り2項目（論理削除の除外・カーソルページネーション）は実SQLでしか検証できなかったもの。
+>
+> **23章でフロントの「入力を渡して出力を確かめられる範囲」を完走した。** 24章
+> （フック・コンポーネント）はDOMの描画と非同期のタイミングが絡むため、道具（React Testing
+> Library）と技法を改めて整理してから着手する。依存は23章で導入済み。
 
 ---
 
@@ -1339,12 +1344,321 @@ SQL側の `ESCAPE '\'` は `standard_conforming_strings` の設定変更に備�
 
 ---
 
+## 23. フロントエンド（純粋関数とAPIクライアント）
+
+対象: `frontend/src/pages/validation.ts`, `frontend/src/utils/datetime.ts`,
+`frontend/src/api/ApiError.ts`, `frontend/src/api/files.ts`,
+`frontend/src/api/tokenStorage.ts`, `frontend/src/api/client.ts`
+テストファイル: `pages/validation.test.ts`, `utils/datetime.test.ts`,
+`api/ApiError.test.ts`, `api/files.test.ts`, `api/tokenStorage.test.ts`, `api/client.test.ts`
+
+### 23.0 なぜ層が変わると道具が変わるのか
+
+6〜21章はすべてバックエンド（Java）だった。ここから初めてフロントエンド（TypeScript）に入る。
+
+| | Service層（6〜17章） | Mapper/Controller層（19〜20章） | **フロントエンド（23章）** |
+|---|---|---|---|
+| 言語・実行系 | Java / JUnit 5 | Java / JUnit 5 + Spring | **TypeScript / Vitest** |
+| 何を差し替えるか | Mapperをモック | 何も差し替えない | **`fetch` と `localStorage`** |
+| 実行環境 | JVM | JVM + Docker | **jsdom**（Node上の擬似ブラウザ） |
+| DBが要るか | 不要 | 必要 | **不要** |
+| 実行時間 | 数秒 | 30秒程度 | **1秒未満** |
+
+**フロントの検証はバックエンドの検証の「重複」ではない。** `validation.ts` はバックエンドDTOと
+同じ規則を書いている（3層で検証する方針、[05_api_design.md](05_api_design.md) 8章）。
+同じ規則が2箇所にあるということは、**片方だけ直す回帰が起こりうる**ということでもある。
+23.1 が守っているのはそこ。
+
+**jsdom とは何か。** Node.js には `document` も `localStorage` も無い。jsdom はそれらを
+JavaScriptで実装した擬似ブラウザで、実際のChromeを起動せずにDOM APIを使うコードを
+テストできる。実ブラウザではないので、**レイアウトや描画に関わることは検証できない**
+（`IntersectionObserver` も無い。23.7 #10 参照）。
+
+**本章のスコープ。** フック（`useLike` / `useFollow` / `useUserSearch`）と React Testing
+Library を使ったコンポーネントテストは対象外とする（5章の予定表を参照。節24として
+繰り越す）。fake timers と `fetch` 待ちの相性問題、jsdom に `IntersectionObserver` が
+無い制約があり、テストの書き方自体を学ぶ本章と同じPRに詰め込むと焦点がぼやけるため。
+
+### 23.1 入力検証の境界値（`validation.ts`、#324〜#361）
+
+[05_api_design.md](05_api_design.md) 8章、および `ValidationConstants.java`
+（`EMAIL_MAX=255` / `USERNAME_MIN=3` / `USERNAME_MAX=30` / `DISPLAY_NAME_MAX=50` /
+`BIO_MAX=160` / `POST_BODY_MAX=280` / `COMMENT_BODY_MAX=280`）より。
+**フロントとバックで境界値の数字が一致していること**自体が検証対象になる。
+
+| # | 技法 | 入力 | 期待 | 根拠 |
+|---|---|---|---|---|
+| 324 | 同値 | `countChars("abc")` | 3 | — |
+| 325 | 境界 | `countChars("👍")`（絵文字1個） | **1**（`.length` は2） | ★ |
+| 326 | 境界 | `countChars("あ".repeat(279) + "😀")` | **280**（`.length` は281） | ★ 実測確認済み |
+| 327 | 同値 | `trim("  ab  ")` | `"ab"` | — |
+| 328 | 境界 | `trim("   ")` | `""` | — |
+| 329 | 境界 | `validateEmail("")` | 「メールアドレスを入力してください」 | 05 の 8章 |
+| 330 | 同値 | `validateEmail("no-at.example.com")` | 「形式が正しくありません」 | 05 の 8章 |
+| 331 | 同値 | `validateEmail("no-dot@example")` | 「形式が正しくありません」 | 05 の 8章 |
+| 332 | 境界 | 255文字のメール（= max） | `undefined`（通る） | `EMAIL_MAX` |
+| 333 | 境界 | 256文字のメール（= max+1） | 「255文字以内で」 | `EMAIL_MAX` |
+| 334 | 同値 | `"taro@example.com"` | `undefined` | — |
+| 335 | 境界 | `validateLoginPassword("")` | 「パスワードを入力してください」 | 05 の 8章 |
+| 336 | 境界 | `validateLoginPassword("a")`（1文字） | **`undefined`（通る）** | ★ ポリシーを漏らさない設計 |
+| 337 | 境界 | `validateUsername("")` | 「入力してください」 | 05 の 8章 |
+| 338 | 境界 | 2文字（= min-1） | 「3〜30文字で」 | `USERNAME_MIN` |
+| 339 | 境界 | 3文字（= min） | `undefined` | `USERNAME_MIN` |
+| 340 | 境界 | 30文字（= max） | `undefined` | `USERNAME_MAX` |
+| 341 | 境界 | 31文字（= max+1） | 「3〜30文字で」 | `USERNAME_MAX` |
+| 342 | 同値 | `"taro-123"`（ハイフン含む） | 「半角英数字とアンダースコアのみ」 | `USERNAME_PATTERN` |
+| 343 | 境界 | `validateDisplayName("")` | 「入力してください」 | 05 の 8章 |
+| 344 | 境界 | 50文字（= max） | `undefined` | `DISPLAY_NAME_MAX` |
+| 345 | 境界 | 51文字（= max+1） | 「1〜50文字で」 | `DISPLAY_NAME_MAX` |
+| 346 | 境界 | `validateSignupPassword("")` | 「入力してください」 | 05 の 8章 |
+| 347 | 境界 | 7文字＋英数字混在（= min-1） | 「8文字以上で」 | 06 の 3.1 |
+| 348 | 境界 | 8文字＋英数字混在（= min） | `undefined` | 06 の 3.1 |
+| 349 | 同値 | 英字のみ8文字 | 「8文字以上で、英字と数字を」 | `PASSWORD_PATTERN` |
+| 350 | 境界 | `validatePasswordConfirm("p", "")` | 「確認用のパスワードを入力してください」 | 05 の 8章 |
+| 351 | 同値 | `validatePasswordConfirm("p1", "p2")` | 「一致しません」 | 05 の 8章 |
+| 352 | 同値 | `validatePasswordConfirm("p1", "p1")` | `undefined` | — |
+| 353 | 境界 | `validatePostBody("   ")`（空白のみ） | 「本文を入力してください」 | `trim`後に判定 |
+| 354 | 境界 | 280文字（= max） | `undefined` | `POST_BODY_MAX` |
+| 355 | 境界 | 281文字（= max+1） | 「280文字以内で」 | `POST_BODY_MAX` |
+| 356 | 境界 | ★ 前後空白込みで281文字（trim後は279） | 「280文字以内で」（**未トリムで数える**） | ★ |
+| 357 | 同値 | `validateCommentBody("   ")` | 「コメントを入力してください」 | メッセージが投稿と異なる |
+| 357b | 境界 | 280文字（= max）／281文字（= max+1） | `undefined` ／「280文字以内で」 | `COMMENT_BODY_MAX` |
+| 358 | 境界 | ★ `validateProfileDisplayName("   ")`（空白のみ） | 「表示名を入力してください」（**#343と非対称**） | ★ |
+| 358b | 境界 | 50文字（= max）／51文字（= max+1） | `undefined` ／「1〜50文字で」 | `DISPLAY_NAME_MAX` |
+| 359 | 境界 | `validateBio("")` | `undefined`（任意項目） | 05 の 8章 |
+| 360 | 境界 | 160文字（= max） | `undefined` | `BIO_MAX` |
+| 361 | 境界 | 161文字（= max+1） | 「160文字以内で」 | `BIO_MAX` |
+
+> **#357b・#358bはカバレッジ実測（`npm run test:coverage`）で分岐漏れが判明し追加した。**
+> 当初1ケースのみだった`validateCommentBody`と`validateProfileDisplayName`の上限分岐が
+> 未検証のままだった。23.6節「分岐網羅（C1）を達成している」という主張を、実測で裏付けた
+> 過程そのものを記録として残す。
+
+> **★ #343 と #358 — 同じ「表示名」なのに空白のみの扱いが違う。**
+> `validateDisplayName`（新規登録）は `!value`、`validateProfileDisplayName`（プロフィール編集）は
+> `!trim(value)` で判定している。前者は `" "` を通してしまう。
+> **ただしこれはバグではない。** `SignupPage.tsx` が呼び出す前にトリム済みの値を渡しているため
+> （D-27）、実際には空白のみが届かない。**「呼び出す前にトリムする」という暗黙の契約が
+> 関数の外側にある。** テストはこの契約を明文化するために書く。将来 `validateDisplayName` を
+> 別の画面から素の入力値で呼んだ瞬間に壊れる、という情報がここに残る。
+
+> **★ #356 — `validatePostBody` は未トリムの文字数を280と比べる。**
+> 一方 `PostComposer` は送信時に `body.trim()` する。「280文字＋前後に空白」は入力欄では
+> 弾かれるが、トリムすれば280文字に収まる。実害は軽微（安全側に倒れている）で、
+> 現状の挙動として固定する。
+
+### 23.2 時刻に依存する関数（`datetime.ts`、#362〜#376）
+
+[03_screen_design.md](03_screen_design.md) 5.1 / SC-04 より。`vi.setSystemTime` で
+基準時刻を `2026-08-15T14:32:00+09:00`（Asia/Tokyo）に固定して検証する。
+
+| # | 技法 | 入力 | 期待 | 根拠 |
+|---|---|---|---|---|
+| 362 | ★ | 前提の明示（`new Date("2026-08-15T05:32:00Z").getHours()`） | **14**（TZがAsia/Tokyoであること） | 実測確認済み |
+| 363 | 境界 | 0秒前 | 「たった今」 | 03 の 5.1 |
+| 364 | 境界 | 59秒前 | 「たった今」 | 03 の 5.1 |
+| 365 | 境界 | 60秒前（= 1分） | 「1分前」 | 03 の 5.1 |
+| 366 | 境界 | 59分前 | 「59分前」 | 03 の 5.1 |
+| 367 | 境界 | 60分前（= 1時間） | 「1時間前」 | 03 の 5.1 |
+| 368 | 境界 | 23時間59分前 | 「23時間前」 | 03 の 5.1 |
+| 369 | 境界 | 24時間前 | 「8月14日」（相対表示から絶対表示へ切替） | 03 の 5.1 |
+| 370 | 同値 | 3日前 | 「8月12日」 | 03 の 5.1 |
+| 371 | ★ | **未来の時刻**（`diffMs` が負） | 「たった今」（現状の挙動） | ★ 時計ずれで起こりうる |
+| 372 | 境界 | `2026-08-15T00:05:00Z`（JST 09:05） | 「2026年8月15日 09:05」（ゼロ埋め） | SC-04 |
+| 373 | 同値 | UTC 23:00 → JST 翌8:00 | 日付が繰り上がる | SC-04 |
+| 374 | 境界 | 月が1桁（8月） | 「8月」（ゼロ埋めしない） | SC-04 |
+| 375 | 同値 | `formatJoined` 通常 | 「2026年8月からご利用」 | SC-05 |
+| 376 | 境界 | UTC 12/31 23:00（JST 1/1） | 「2027年1月からご利用」（**年をまたぐ**） | SC-05 |
+
+> **`Date.now()` を使う関数はそのままではテストできない。** 実行のたびに結果が変わり
+> アサーションが書けない。`vi.setSystemTime` は時計そのものを止める道具で、バックエンドで
+> `Clock` を注入する設計に相当する。ただしVitestでは実装を変えずに外から差し替えられる。
+
+> **タイムゾーンを固定しないとテストは環境依存になる。** `formatAbsolute` は `getHours()`
+> （ローカル時刻）を使う。同じ瞬間が Asia/Tokyo なら `14:32`、UTC なら `5:32` になることを
+> 実測で確認した。開発機がJSTでも実行環境がUTCなら期待値が9時間ずれる。`vite.config.ts` の
+> `test.env.TZ` で固定し、#362 でその前提自体を検証する。
+
+### 23.3 エラーの正規化（`ApiError.toFieldErrors`、#377〜#385）
+
+[05_api_design.md](05_api_design.md) 1.3、`ApiError.ts` の3経路（400 / 409 / その他）を
+デシジョンテーブルで確認する。
+
+```
+① fieldErrors が1件以上ある（400 VALIDATION_ERROR）
+② fieldErrors は空で、code が CONFLICT_FIELD テーブルにある（409）
+③ どちらでもない
+```
+
+| # | 技法 | 入力 | 通る経路 | 期待 | 根拠 |
+|---|---|---|---|---|---|
+| 377 | 表 | fieldErrors 1件 | ① | `{email: "..."}` | 05 の 1.3 |
+| 378 | 表 | fieldErrors 2件（別フィールド） | ① | 2キーとも反映 | 05 の 1.3 |
+| 379 | 表 | 同一フィールドに2件 | ①（`in`ガード） | **最初のメッセージのみ**採用 | ★ |
+| 380 | 表 | fieldErrors空、409 EMAIL_ALREADY_EXISTS | ② | `{email: message}` | 05 の 1.3 |
+| 381 | 表 | fieldErrors空、409 USERNAME_ALREADY_EXISTS | ② | `{username: message}` | 05 の 1.3 |
+| 382 | 表 | ★ fieldErrors 1件あり、かつ409 EMAIL_ALREADY_EXISTS | ①（②に行かない） | **errors[] が優先** | ★ |
+| 383 | 表 | fieldErrors空、401 INVALID_CREDENTIALS | ③ | `{}` | 05 の 1.3 |
+| 384 | 表 | fieldErrors空、status=0 NETWORK_ERROR | ③ | `{}` | — |
+| 385 | 同値 | `ApiError.network()` | — | status=0 / `NETWORK_ERROR` / 既定文言 | — |
+
+> **★ #382 は表を作って初めて出てきた組み合わせ。** 実装は `fieldErrors.length > 0` を
+> 先に見るので、409でもerrors[]があればそちらが勝つ。現状のバックエンドは409にerrors[]を
+> 付けないため実際には起きないが、将来両方返し始めたときの挙動をここで固定しておく。
+
+### 23.4 URL組み立てとトークン保管（`files.resolveFileUrl` / `tokenStorage.ts`、#386〜#396）
+
+[09_decision_log.md](09_decision_log.md) D-47（URLのオリジン解決）・D-07（保管場所）より。
+
+| # | 技法 | 入力 | 期待 | 根拠 |
+|---|---|---|---|---|
+| 386 | 境界 | `resolveFileUrl(null)` | `null` | D-47 |
+| 387 | 同値 | `resolveFileUrl("/api/v1/files/1")` | オリジンが付いた絶対URL | D-47 |
+| 388 | 境界 | `resolveFileUrl("")` | 空のオリジン付きURL（現状の挙動） | ★ |
+| 389 | 同値 | `fileUrl(1)` | `${BASE_URL}/files/1` | #26 |
+| 390 | 境界 | 未保存で `getAccessToken()` | `null` | D-07 |
+| 391 | 境界 | 未保存で `getRefreshToken()` | `null` | D-07 |
+| 392 | 同値 | `saveTokens(a, r)` 後に両方取得 | 保存した値が返る | D-07 |
+| 393 | 境界 | `saveTokens` を2回呼ぶ | **必ず新しい値で上書き**される | D-29（ローテーション） |
+| 394 | 境界 | ★ `clearTokens()` | **アクセストークンとリフレッシュトークンの両方**が消える | ★ |
+| 395 | 境界 | clear後に取得 | 両方 `null` | D-07 |
+| 396 | 同値 | 一連の保存→取得→消去→取得 | 状態が正しく遷移する | — |
+
+> **#394が守っているのはD-07の前提そのもの。** `clearTokens`がアクセストークンだけ消して
+> refreshTokenを残すと「ログアウトしたのにトークンが残る」状態になる。localStorageへの
+> 読み書きをこのファイルに閉じ込めているのは、散らばると必ず消し忘れが出るため。
+
+> **jsdomの`localStorage`はテスト間で共有される。** `beforeEach`で`localStorage.clear()`を
+> 呼ばないと前のテストの値が残る。D-56の`@Transactional`ロールバックと同じ問題が、
+> 別の場所で同じ形で出てくる。
+
+### 23.5 401時のトークン再発行（`api/client.ts`、#397〜#412）
+
+対象: `client.ts` の `request` / `send` / `doRefresh` / `refreshOnce`。
+**バックエンドの `RefreshTokenServiceTest` #177〜#186 と対になる、フロント側の要。**
+
+`client.ts` のJavadocが明示している事故:
+
+> 複数のAPIが同時に401になったとき、それぞれが個別にリフレッシュすると、
+> ローテーションにより2回目以降が「使用済みトークンの再提示」になり、
+> バックエンドに盗用と判定されてファミリー全体が失効する（＝強制ログアウト）。
+
+**症状が「たまに勝手にログアウトする」という再現困難な形で出る**ため、テストで固定する
+価値が最も高い。この節だけ、Service層と同じ「状態・操作・期待・壊れると何が起きるか」の
+4列を使う（検証の性質が「戻り値」から「何回呼ばれたか」に変わるため）。
+
+| # | 状態 | 操作 | 期待 | 壊れると何が起きるか |
+|---|---|---|---|---|
+| 397 | トークンあり | GET 200 | `Authorization: Bearer` が付く | |
+| 398 | トークンなし | GET 200 | `Authorization` を付けない | |
+| 399 | — | `public: true` で200 | トークンがあっても付けない | ログイン失敗のたびに無駄なリフレッシュ |
+| 400 | — | GET 204 | `undefined` を返す（`.json()` を呼ばない） | ログアウトが必ず失敗する |
+| 401 | — | bodyありPOST | `Content-Type: application/json` が付く | |
+| 402 | — | `formData` 指定 | **`Content-Type` を設定しない** | multipartのboundaryが壊れ、画像アップロードが全滅 |
+| 403 | — | 500 + JSON body | `ApiError`（code/message反映） | |
+| 404 | — | 500 + 壊れたbody | `INTERNAL_ERROR` にフォールバック | |
+| 405 | — | fetch が reject | `ApiError.network()`（status 0） | |
+| **406** | — | fetch が **AbortError** | **DOMExceptionがそのまま**（`ApiError` にしない） | 検索の入力ごとにエラー表示が出る |
+| **407** | refreshTokenあり | 401 → refresh成功 → 200 | 元のリクエストが**新トークンで1回だけ**再送 | |
+| 408 | 同上 | 同上 | 新しい2トークンがlocalStorageに保存される | |
+| **409** | 同上 | 401 → refresh成功 → **再び401** | `clearTokens` + `onSessionExpired` + `UNAUTHENTICATED`。**refreshは2回目を呼ばない** | 無限ループ |
+| 410 | refreshTokenなし | 401 | refreshを**呼ばずに**clearTokens + `INVALID_REFRESH_TOKEN` | |
+| 411 | refreshTokenあり | 401 → refreshも401 | clearTokens + onSessionExpired。**再帰しない** | |
+| **412** | 2本のAPIが**同時に401** | 両方 `request` | **`POST /auth/refresh` がちょうど1回**。両方が新トークンで再試行し成功 | **たまに勝手にログアウトする**（盗用判定でファミリー失効） |
+
+> **#412はバックエンドの#177〜#186と対になっている。** バックエンド側は「使用済みトークンが
+> 来たらファミリーを失効させる」ことを検証している。フロント側は「その状況を作らない」ことを
+> 検証している。**どちらか片方だけでは、契約の半分しか固定できない。**
+
+> **`refreshing` はモジュールスコープの変数で、テスト間で持ち越される。** 前のテストが
+> `refreshing` を残すと、次のテストの結果が変わる。**各ケースで `vi.resetModules()` を呼び、
+> `await import("./client")` で読み直す。** `import` 文を上に書くと、モジュールは一度しか
+> 評価されないため効かない。
+
+> **fake timersと`fetch`待ちを混ぜない。** 23.2は`vi.useFakeTimers()`を使うが、本節では
+> 使わない（`await fetch`を待つ最中にタイマーが固定されているとPromiseが解決しないことが
+> ある）。#412は`Promise.all`と手動制御のdeferred（resolve関数を外に取り出したPromise）で
+> 同時性を表現する。
+
+### 23.6 分岐網羅の確認（ホワイトボックス視点）
+
+| 対象 | 分岐 | 踏むケース |
+|---|---|---|
+| `validation.ts` 各関数 | 必須チェック / 上限 / 下限 / 形式 | #324〜#361 |
+| `formatRelative` | 1分未満 / 1時間未満 / 24時間未満 / それ以降 | #363〜#370 |
+| | 未来の時刻（負のdiff） | #371 |
+| `toFieldErrors` | 経路①fieldErrorsあり / 経路②409コード / 経路③その他 | #377〜#385 |
+| `resolveFileUrl` | null / 通常パス | #386〜#388 |
+| `tokenStorage` 各関数 | 未保存 / 保存後 / 消去後 | #390〜#396 |
+| `client.request` | 非public401→refresh成功 / 再試行後401 / publicは対象外 | #399, #407, #409 |
+| `client.send` | body有無 / token有無・public / AbortError / その他失敗 | #397〜#399, #401, #402, #405, #406 |
+| `client.toApiError` | JSON解析成功 / 失敗（フォールバック） | #403, #404 |
+| `client.doRefresh` | token無 / fetch失敗 / !ok / 成功 | #407, #410, #411 |
+| `client.refreshOnce` | refreshing あり（合流）/ なし（新規開始） | #412 |
+
+**分岐網羅（C1）を達成している。**
+
+> `npm run test:coverage` の Branch カバレッジが上表と一致することを確認した。
+> 手で作った表と機械が数えた数字が合っていることが、表の作り漏れが無いことの裏付けになる。
+
+### 23.7 テストが本当に落ちるかの確認（ミューテーション）
+
+6.6節・9.7節・17章・21章と同じ手順。わざと実装を壊し、対応するテストが赤くなることを
+確認してから元に戻した（`git diff --stat -- frontend/src/
+":(exclude)frontend/src/**/*.test.ts" ":(exclude)frontend/src/setupTests.ts"` が
+0行であることを確認済み）。
+
+| # | 壊した内容 | 想定 | 結果 |
+|---|---|---|---|
+| 1 | `validation.ts` `countChars` を `[...value].length` から `value.length` に | #326が落ちる | ✅ **#326のみが赤** |
+| 2 | `validation.ts` `validateUsername` の `length > 30` を `>= 30` に | #340が落ちる | ✅ **#340のみが赤** |
+| 3 | `datetime.ts` `formatRelative` の `min < 60` を `min <= 60` に | #367が落ちる | ✅ **#367のみが赤** |
+| 4 | `ApiError.ts` `toFieldErrors` の `if (!(item.field in result))` ガードを外す | #379が落ちる | ✅ **#379のみが赤**（最後のメッセージが残る） |
+| 5 | `tokenStorage.ts` `clearTokens` から `removeItem(REFRESH_TOKEN_KEY)` を削除 | #394が落ちる | ✅ **#394が赤** |
+| **6** | `client.ts` `refreshOnce` のガード `if (!refreshing)` を外し、毎回 `doRefresh()` を呼ぶ | #412が落ちる | ✅ **#412のみが赤**（refreshが2回呼ばれる）。**この層でしか検出できない** |
+| 7 | `client.ts` 再試行後の401チェックを削除 | #409が落ちる | ✅ **#409が赤** |
+| 8 | `client.ts` `send` の `AbortError` 再throwを削除し、全部 `ApiError.network()` に | #406が落ちる | ✅ **#406が赤** |
+| **9** | `validation.ts` `validateDisplayName` の `!value` を `!trim(value)` に | 変化なしを想定していたが実際は検出できた | ✅ **#358が赤**（後述） |
+| **10** | `useInfiniteScroll.ts` の `rootMargin: "200px"` を `"0px"` に | — | ⚠️ **緑のまま**（後述） |
+
+**9個とも検出できた（#10を除く）。**
+
+### 23.8 ミューテーションで判明した「想定と違った」もの
+
+**#9は「検出できない」と想定していたが、実際にはテストで検出できた。**
+理由は、23.1 ★（#343と#358の非対称性）を固定するために書いた #358 が
+「`validateDisplayName("   ")` は `undefined` を返す」という**現状の非対称な挙動そのもの**を
+明示的にアサートしていたため。`!value` を `!trim(value)` に変えると、この非対称性が
+解消されて #358 のアサーションと矛盾し、テストが赤くなった。
+
+**当初の想定が誤っていた理由。** `validateDisplayName`単体のテスト（#343）だけを見れば、
+`!value` でも `!trim(value)` でも空文字に対する結果は同じであり検出できないと考えていた。
+しかし実際には、**非対称性そのものを固定する目的で書いた#358が、副産物として
+`validateDisplayName`の判定方法の変更も検出した。** 「呼び出し側がトリムするので実害が
+無い」という前提（D-27）は変わらないが、**関数単体の挙動が変わったこと自体は、
+非対称性を明示したテストによって検出可能である**と判明した。
+
+**#10 — `rootMargin`はテストで固定できない。**
+`IntersectionObserver`はjsdomに存在しないため、`useInfiniteScroll`はそもそも本章の
+対象外（23.0参照）。仮にスタブを置いても、「下端200px手前で発火する」ことはスタブでは
+確認できない（スタブは渡された値を記録するだけで、実際に交差判定を行うのはブラウザ）。
+**`rootMargin`の値が正しいかはE2Eでしか検証できない。** 道具の限界を知ることは、
+テストを書かない判断の根拠にもなる。
+
+> **「緑のまま」を放置せず、なぜ緑なのかを突き止めることに価値がある。**
+> バックエンドの21.2節と同じ結論になった。「守っているものが想像と違った」という
+> 気づきそのものが、本章の成果の一部である。
+
+---
+
 ## 22. 参照
 
 | 文書 | 内容 |
 |---|---|
-| [06_non_functional.md](06_non_functional.md) 5.3 | **必ず書くべきテスト17項目**（受け入れ基準） |
+| [06_non_functional.md](06_non_functional.md) 5.3 | **必ず書くべきテスト14項目**（受け入れ基準） |
 | [09_decision_log.md](09_decision_log.md) D-33 | カーソルの時刻精度をマイクロ秒にした理由 |
 | [09_decision_log.md](09_decision_log.md) D-42 | 画像のマジックバイト検証 |
 | [09_decision_log.md](09_decision_log.md) D-54 | テストDBに Testcontainers を採用した理由 |
+| [09_decision_log.md](09_decision_log.md) D-57 | フロントのテスト基盤に Vitest を採用した理由 |
+| [09_decision_log.md](09_decision_log.md) D-58 | テストを本番コードと同じ階層・検査対象に置く理由 |
 | [.claude/skills/quality-check/SKILL.md](../.claude/skills/quality-check/SKILL.md) | テスト実行手順 |

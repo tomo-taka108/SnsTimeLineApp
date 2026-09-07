@@ -22,6 +22,26 @@ cd frontend && npm install && npm run dev   # :5173
 npx tsc --noEmit -p tsconfig.app.json   # 型チェック
 npm run lint                            # oxlint
 npm run build                           # 本番ビルド
+npm test                                # Vitest（自動テスト）
+```
+
+## テスト
+
+Vitest + jsdom。React Testing Library の依存も導入済みだが、現時点でのテスト対象は
+**純粋関数とAPIクライアント**（`src/pages/validation.ts` / `src/utils/datetime.ts` /
+`src/api/ApiError.ts` / `src/api/files.ts` / `src/api/tokenStorage.ts` / `src/api/client.ts`）。
+フックとコンポーネントのテストは未着手（[docs/11_test_design.md](../docs/11_test_design.md)
+5章 節24）。
+
+- **配置はソースと同じ階層に `*.test.ts`（co-location）。** `__tests__/` ツリーは作らない
+  （[09_decision_log.md](../docs/09_decision_log.md) D-58）
+- **TZは `vite.config.ts` の `test.env` で `Asia/Tokyo` に固定している。** `formatAbsolute` /
+  `formatJoined` はローカルタイムゾーン依存のため、固定しないと環境ごとに結果が変わる
+- 詳しいケース表は [docs/11_test_design.md](../docs/11_test_design.md) 23章を参照
+
+```bash
+npm test              # 全テスト（vitest run）
+npm run test:coverage # 分岐カバレッジ付き
 ```
 
 ## 構成
@@ -47,15 +67,15 @@ npm run build                           # 本番ビルド
 | SC-01 | `/login` | ログイン |
 | SC-02 | `/signup` | 新規登録（成功するとそのままログイン状態になる） |
 | SC-03 | `/` | タイムライン。無限スクロール・タブ・新着通知バナー・投稿作成（FAB→MD-01、**画像添付つき**）・いいね |
-| SC-04 | `/posts/:postId` | 投稿詳細。編集(MD-02)・削除(MD-03)・いいね・コメント（投稿・表示・削除。編集はPhase2）・**添付画像の拡大表示** |
+| SC-04 | `/posts/:postId` | 投稿詳細。編集(MD-02)・削除(MD-03)・いいね・コメント（投稿・表示・編集・削除）・**添付画像の拡大表示** |
 | SC-05 | `/users/:userId` | プロフィール。自分／他人で表示分岐、フォローボタン、投稿一覧（無限スクロール） |
 | SC-06 | `/settings/profile` | プロフィール編集。表示名・自己紹介・**プロフィール画像（変更・削除）** |
+| SC-07 | `/search` | ユーザー検索 |
 | SC-08 | `/users/:userId/following` | フォロー中一覧 |
 | SC-09 | `/users/:userId/followers` | フォロワー一覧 |
 | SC-12 | `*` | NotFound |
 
-> **投稿画像は1枚まで。** コメント編集（Phase2）、ユーザー検索（SC-07, Phase2）、
-> いいねしたユーザー一覧（SC-10, Phase2）は未実装。
+> **投稿画像は1枚まで。** いいねしたユーザー一覧（SC-10, Phase2）・パスワード変更（SC-11）は未実装。
 
 ## 触るときに知っておくこと
 
