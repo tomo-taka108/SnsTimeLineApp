@@ -123,8 +123,14 @@ cd frontend && npm test
 - テストは対象ソースと同じ階層に `*.test.ts` として置く（D-58）。
   `src/` 配下にあるため `tsc -b` の型検査対象にも入る
 - `npm test` は `vitest run`。素の `vitest` はウォッチモードに入り終了しない
-- 対象範囲は [docs/11_test_design.md](../../../docs/11_test_design.md) 23章
-  （純粋関数とAPIクライアント）。フック・コンポーネントは未着手（同5章 節24）
+- 対象範囲は [docs/11_test_design.md](../../../docs/11_test_design.md) 23章（純粋関数・
+  APIクライアント）と24章（フック・コンポーネント）。**`useInfiniteScroll` のみ対象外**
+  （jsdomに `IntersectionObserver` が無く、E2Eでしか検証できない。23.8 #10）
+
+> **フックやコンポーネントのテストが落ちたら、まずテスト側を疑う**（24.7節）。
+> fake timers 中の `waitFor` はタイムアウトし、`act()` で包まないと状態が更新されず、
+> `unmount()` を忘れると前のテストのタイマーが次に漏れる。**実装は正しいのに落ちる**
+> パターンが多い層。
 
 ---
 
