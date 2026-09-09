@@ -67,5 +67,14 @@ app:
 logging:
   level:
     root: INFO
-    com.example.snstimeline: INFO
+    com.example.snstimeline: ${LOG_LEVEL_APP:INFO}
     org.flywaydb: INFO
+  structured:
+    format:
+      # 空文字なら通常のプレーンテキスト出力。本番相当では ecs を指定する
+      # （docs/12_logging_and_operations.md 3章、D-62）。開発中にJSONが流れて
+      # 読みにくくならないよう、既定はテキストのままにしてある。
+      console: ${LOG_STRUCTURED_FORMAT:}
+    json:
+      add:
+        service.env: ${APP_ENV:local}

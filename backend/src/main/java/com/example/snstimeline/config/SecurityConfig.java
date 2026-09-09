@@ -3,6 +3,9 @@ package com.example.snstimeline.config;
 import com.example.snstimeline.auth.AuthEntryPoint;
 import com.example.snstimeline.auth.JwtAuthenticationFilter;
 import com.example.snstimeline.auth.RestAccessDeniedHandler;
+import com.example.snstimeline.common.logging.AccessLogFilter;
+import com.example.snstimeline.common.logging.RequestIdFilter;
+import com.example.snstimeline.common.logging.UserIdFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,6 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.CorsUtils;
+import org.springframework.web.filter.CorsFilter;
 
 /** Spring Security の設定（docs/07_architecture.md 4.1, docs/06_non_functional.md 3章）。 */
 @Configuration
@@ -26,16 +30,25 @@ public class SecurityConfig {
   private final AuthEntryPoint authEntryPoint;
   private final RestAccessDeniedHandler restAccessDeniedHandler;
   private final CorsConfigurationSource corsConfigurationSource;
+  private final RequestIdFilter requestIdFilter;
+  private final UserIdFilter userIdFilter;
+  private final AccessLogFilter accessLogFilter;
 
   public SecurityConfig(
       JwtAuthenticationFilter jwtAuthenticationFilter,
       AuthEntryPoint authEntryPoint,
       RestAccessDeniedHandler restAccessDeniedHandler,
-      CorsConfigurationSource corsConfigurationSource) {
+      CorsConfigurationSource corsConfigurationSource,
+      RequestIdFilter requestIdFilter,
+      UserIdFilter userIdFilter,
+      AccessLogFilter accessLogFilter) {
     this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     this.authEntryPoint = authEntryPoint;
     this.restAccessDeniedHandler = restAccessDeniedHandler;
     this.corsConfigurationSource = corsConfigurationSource;
+    this.requestIdFilter = requestIdFilter;
+    this.userIdFilter = userIdFilter;
+    this.accessLogFilter = accessLogFilter;
   }
 
   @Bean
@@ -84,7 +97,17 @@ public class SecurityConfig {
                     .permitAll()
                     .anyRequest()
                     .authenticated())
-        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        // RequestIdFilter は全フィルタの中で最初に動く必要がある（CORSやAuth失敗時のログにも
+        // リクエストIDを載せるため）。AccessLogFilter はその内側に差す。
+        // 順序が重要: RequestIdFilterがMDCに載せてから内側のAccessLogFilterへ処理を渡し、
+        // AccessLogFilterのfinallyでログを出した後にRequestIdFilterのfinallyでMDCを消す。
+        // 逆順にすると、AccessLogFilterが1行ログを出す時点でMDCが既に消えており、
+        // requestIdの無いアクセスログになってしまう（docs/12_logging_and_operations.md 4章）。
+        .addFilterBefore(requestIdFilter, CorsFilter.class)
+        .addFilterAfter(accessLogFilter, RequestIdFilter.class)
+        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+        // ユーザーIDはJWTフィルタが SecurityContextHolder にセットした後でなければ読めない
+        .addFilterAfter(userIdFilter, JwtAuthenticationFilter.class);
 
     return http.build();
   }
