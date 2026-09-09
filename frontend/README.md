@@ -27,17 +27,28 @@ npm test                                # Vitest（自動テスト）
 
 ## テスト
 
-Vitest + jsdom。React Testing Library の依存も導入済みだが、現時点でのテスト対象は
-**純粋関数とAPIクライアント**（`src/pages/validation.ts` / `src/utils/datetime.ts` /
-`src/api/ApiError.ts` / `src/api/files.ts` / `src/api/tokenStorage.ts` / `src/api/client.ts`）。
-フックとコンポーネントのテストは未着手（[docs/11_test_design.md](../docs/11_test_design.md)
-5章 節24）。
+Vitest + jsdom + React Testing Library。**142ケース**。
 
-- **配置はソースと同じ階層に `*.test.ts`（co-location）。** `__tests__/` ツリーは作らない
+| 対象 | ケース表 |
+|---|---|
+| 純粋関数・APIクライアント（`validation` / `datetime` / `ApiError` / `files` / `tokenStorage` / `client`） | [11_test_design.md](../docs/11_test_design.md) 23章 |
+| フック・コンポーネント（`useLike` / `useFollow` / `useUserSearch` / `useNewPostCount` / `Avatar` / `FormField` / `Modal` / `Pagination` / `CommentForm` / `FollowButton`） | 同 24章 |
+
+- **配置はソースと同じ階層に `*.test.ts(x)`（co-location）。** `__tests__/` ツリーは作らない
   （[09_decision_log.md](../docs/09_decision_log.md) D-58）
 - **TZは `vite.config.ts` の `test.env` で `Asia/Tokyo` に固定している。** `formatAbsolute` /
   `formatJoined` はローカルタイムゾーン依存のため、固定しないと環境ごとに結果が変わる
-- 詳しいケース表は [docs/11_test_design.md](../docs/11_test_design.md) 23章を参照
+- **`useInfiniteScroll` はテスト対象外。** jsdomに `IntersectionObserver` が無く、
+  スタブを置いても `rootMargin` の正しさは検証できないため（E2Eの領域。23.8 #10）
+
+### テストを書くときの注意（実際に踏んだもの、24.7節）
+
+| 症状 | 原因と対処 |
+|---|---|
+| テストがタイムアウトする | fake timers 中は `waitFor` が使えない（内部でタイマーを使うため）。`advanceTimersByTimeAsync` の直後に同期的に assert する |
+| 状態が古いまま見える | 時間を進める操作を **`act()` で包む** |
+| 「Found multiple elements」 | `globals: false` だとRTLの自動クリーンアップが効かない。`src/setupTests.ts` で `afterEach(cleanup)` 登録済み |
+| ポーリング回数が合わない | 前のテストのフックが残っている。`unmount()` する |
 
 ```bash
 npm test              # 全テスト（vitest run）
