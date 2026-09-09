@@ -75,6 +75,10 @@ logging:
       # （docs/12_logging_and_operations.md 3章、D-62）。開発中にJSONが流れて
       # 読みにくくならないよう、既定はテキストのままにしてある。
       console: ${LOG_STRUCTURED_FORMAT:}
-    json:
-      add:
-        service.env: ${APP_ENV:local}
+    ecs:
+      service:
+        # ECS形式は service.* を自前で持つ（service.name / service.version 等）。
+        # logging.structured.json.add で service.env を追加しようとすると
+        # 「The name 'service' has already been written」で起動時に例外になるため、
+        # ECS用に用意されたこちらのプロパティを使う。
+        environment: ${APP_ENV:local}
