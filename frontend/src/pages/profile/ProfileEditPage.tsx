@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES, resolveFileUrl, uploadFile } from "../../api/files";
+import { ALLOWED_IMAGE_TYPES, resolveFileUrl, uploadFile, validateImageFile } from "../../api/files";
 import { fetchProfile, updateProfile } from "../../api/users";
 import type { UserProfile } from "../../api/types";
 import { AppHeader } from "../../components/AppHeader";
@@ -102,13 +102,9 @@ export function ProfileEditPage() {
     event.target.value = "";
     if (!file) return;
 
-    // クライアント側の検証。実際の検証はサーバー側が行う
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
-      showToast("対応していないファイル形式です（JPEG / PNG / WebP のみ）", true);
-      return;
-    }
-    if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      showToast("ファイルサイズが大きすぎます（5MBまで）", true);
+    const fileError = validateImageFile(file);
+    if (fileError) {
+      showToast(fileError, true);
       return;
     }
 
@@ -134,13 +130,9 @@ export function ProfileEditPage() {
     event.target.value = "";
     if (!file) return;
 
-    // クライアント側の検証。実際の検証はサーバー側が行う
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
-      showToast("対応していないファイル形式です（JPEG / PNG / WebP のみ）", true);
-      return;
-    }
-    if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      showToast("ファイルサイズが大きすぎます（5MBまで）", true);
+    const fileError = validateImageFile(file);
+    if (fileError) {
+      showToast(fileError, true);
       return;
     }
 

@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES, resolveFileUrl, uploadFile } from "../api/files";
+import { ALLOWED_IMAGE_TYPES, resolveFileUrl, uploadFile, validateImageFile } from "../api/files";
 import type { PostImageSummary } from "../api/types";
 import { useAuth } from "../auth/useAuth";
 import { countChars, validatePostBody } from "../pages/validation";
@@ -85,14 +85,10 @@ export function PostComposer({
     event.target.value = "";
     if (!file) return;
 
-    // クライアント側の検証。違反時はその場でエラーを出し、アップロードしない
-    // （docs/03_screen_design.md MD-01）。実際の検証はサーバー側が行う
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
-      setError("対応していないファイル形式です（JPEG / PNG / WebP のみ）");
-      return;
-    }
-    if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      setError("ファイルサイズが大きすぎます（5MBまで）");
+    // 違反時はその場でエラーを出し、アップロードしない（docs/03_screen_design.md MD-01）
+    const fileError = validateImageFile(file);
+    if (fileError) {
+      setError(fileError);
       return;
     }
 

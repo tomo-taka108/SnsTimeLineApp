@@ -8,11 +8,26 @@ export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as 
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 /**
+ * 送信前の形式・サイズ確認。問題があればエラーメッセージ、無ければ undefined を返す。
+ *
+ * ここで弾けば無駄な通信をせずに済むが、**これは利便性のためであって検証ではない**。
+ * クライアント側の検証は迂回できるため、実際の検証はサーバー側が行う
+ * （形式はマジックバイトで判定する。docs/09_decision_log.md D-42）。
+ */
+export function validateImageFile(file: File): string | undefined {
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
+    return "対応していないファイル形式です（JPEG / PNG / WebP のみ）";
+  }
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    return "ファイルサイズが大きすぎます（5MBまで）";
+  }
+  return undefined;
+}
+
+/**
  * #25 画像アップロード（F-IM-01）。
  *
- * 送信前にクライアント側でも形式とサイズを確認する（SC-03 の MD-01 の挙動）。
- * ここで弾けば無駄な通信をせずに済むが、<b>これは利便性のためであって検証ではない</b>。
- * 実際の検証はサーバー側が行う（クライアントの検証は迂回できるため）。
+ * 送信前に {@link validateImageFile} で確認してから呼ぶこと（SC-03 の MD-01 の挙動）。
  */
 export async function uploadFile(file: File): Promise<UploadFileResponse> {
   const formData = new FormData();
