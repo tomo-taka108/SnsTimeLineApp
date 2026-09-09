@@ -100,16 +100,20 @@ public class GlobalExceptionHandler {
     return build(code, code.getDefaultMessage(), request, null);
   }
 
-  /** サービス層をすり抜けた一意制約違反の保険。 */
+  /**
+   * サービス層をすり抜けた整合性制約違反の保険。
+   *
+   * <p>ここに到達すること自体がバグ。想定される重複はサービス層が扱う（メール・ユーザー名は {@code
+   * AuthService.toConflict}、いいね・フォローは事前SELECTによる冪等化。D-34 / D-37）。かつては一律で409 {@code
+   * EMAIL_ALREADY_EXISTS} を返していたが、 ユーザー名の重複でも「このメールアドレスは既に登録されています」と表示され、 原因の特定を妨げていた（#44
+   * ④）。誤った案内より500で気づけるほうを選ぶ（D-60）。
+   */
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<ErrorResponse> handleDataIntegrity(
       DataIntegrityViolationException e, HttpServletRequest request) {
-    log.warn("一意制約違反 path={}", request.getRequestURI());
+    log.error("整合性制約違反 path={}", request.getRequestURI(), e);
     return build(
-        ErrorCode.EMAIL_ALREADY_EXISTS,
-        ErrorCode.EMAIL_ALREADY_EXISTS.getDefaultMessage(),
-        request,
-        null);
+        ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.getDefaultMessage(), request, null);
   }
 
   /** 想定外の例外。スタックトレースはサーバー側のログにのみ出す。 */

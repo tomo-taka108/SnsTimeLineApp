@@ -119,20 +119,18 @@ class FollowMapperTest extends AbstractIntegrationTest {
   }
 
   @Nested
-  @DisplayName("論理削除の扱いが list と count で異なる箇所（Issue #44）")
-  class SoftDeleteInconsistency {
+  @DisplayName("論理削除の扱いが list と count で一致すること（Issue #44）")
+  class SoftDeleteConsistency {
 
     /**
-     * #246 <b>現状の挙動を固定している。本来は list と count が一致すべき（Issue #44 ②）。</b>
+     * #246 フォロー中の件数と一覧が一致すること（Issue #44 ② の修正を固定する）。
      *
-     * <p>{@code countFollowing} は {@code SELECT COUNT(*) FROM follows} だけで users を見ないため、
-     * 退会したユーザーも数える。一方 {@code findFollowing} は users とJOINして除外する。 利用者から見ると「フォロー中 1」と表示されるのに、一覧を開くと空。
-     *
-     * <p><b>修正時はこのテストの期待値を反転させること。</b>
+     * <p>かつて {@code countFollowing} は {@code SELECT COUNT(*) FROM follows} だけで users を見ておらず、
+     * 退会したユーザーも数えていた。利用者から見ると「フォロー中 1」と表示されるのに一覧を開くと空。 {@code findFollowing} と同じJOINを足して解消した。
      */
     @Test
-    @DisplayName("#246 countFollowingは退会ユーザーを数えるが、findFollowingは返さない（Issue #44）")
-    void フォロー中の件数と一覧が食い違う() {
+    @DisplayName("#246 countFollowingは退会ユーザーを数えない（findFollowingと一致する）")
+    void フォロー中の件数と一覧が一致する() {
       long me = fixtures.user("alice");
       long gone = fixtures.user("bob");
       fixtures.follow(me, gone);
@@ -141,14 +139,14 @@ class FollowMapperTest extends AbstractIntegrationTest {
       int count = followMapper.countFollowing(me);
       List<FollowRow> rows = followMapper.findFollowing(me, null, null, NO_LIMIT);
 
-      assertThat(count).isEqualTo(1); // 現状: 数える
-      assertThat(rows).isEmpty(); // 現状: 一覧には出ない
+      assertThat(count).isZero();
+      assertThat(rows).isEmpty();
     }
 
-    /** #247 フォロワー側も同じ食い違いがある（Issue #44 ②の対）。 */
+    /** #247 フォロワー側も同じく一致すること（Issue #44 ②の対）。 */
     @Test
-    @DisplayName("#247 countFollowersも退会ユーザーを数える（Issue #44）")
-    void フォロワーの件数と一覧が食い違う() {
+    @DisplayName("#247 countFollowersも退会ユーザーを数えない（findFollowersと一致する）")
+    void フォロワーの件数と一覧が一致する() {
       long me = fixtures.user("alice");
       long gone = fixtures.user("bob");
       fixtures.follow(gone, me);
@@ -157,8 +155,23 @@ class FollowMapperTest extends AbstractIntegrationTest {
       int count = followMapper.countFollowers(me);
       List<FollowRow> rows = followMapper.findFollowers(me, null, null, NO_LIMIT);
 
-      assertThat(count).isEqualTo(1);
+      assertThat(count).isZero();
       assertThat(rows).isEmpty();
+    }
+
+    /** #247b 在籍しているフォロー関係は、これまでどおり数える（修正で数え漏らしていないこと）。 */
+    @Test
+    @DisplayName("#247b 在籍ユーザーはcount・listの双方に現れる")
+    void 在籍ユーザーは数える() {
+      long me = fixtures.user("alice");
+      long other = fixtures.user("bob");
+      fixtures.follow(me, other);
+      fixtures.follow(other, me);
+
+      assertThat(followMapper.countFollowing(me)).isEqualTo(1);
+      assertThat(followMapper.countFollowers(me)).isEqualTo(1);
+      assertThat(followMapper.findFollowing(me, null, null, NO_LIMIT)).hasSize(1);
+      assertThat(followMapper.findFollowers(me, null, null, NO_LIMIT)).hasSize(1);
     }
   }
 

@@ -182,20 +182,20 @@ class PostMapperTest extends AbstractIntegrationTest {
   }
 
   @Nested
-  @DisplayName("論理削除の扱いが list と count で異なる箇所（Issue #44）")
-  class SoftDeleteInconsistency {
+  @DisplayName("論理削除の扱いが list と count で一致すること（Issue #44）")
+  class SoftDeleteConsistency {
 
     /**
-     * #230 <b>現状の挙動を固定している。本来は list と count が一致すべき（Issue #44 ①）。</b>
+     * #230 新着件数と一覧が一致すること（Issue #44 ① の修正を固定する）。
      *
-     * <p>{@code findTimeline} は users とJOINして退会者の投稿を除くが、{@code countNewer} は
-     * postsしか見ないため退会者の投稿を数えてしまう。利用者から見ると「新着1件」と出るのに 押しても何も無い。
+     * <p>かつて {@code countNewer} は posts しか見ておらず、退会者の投稿を数えていた。 利用者から見ると「新着1件」と出るのに押しても何も無い、という状態になる。
+     * {@code findTimeline} と同じ users のJOINを足して解消した。
      *
-     * <p><b>修正時はこのテストの期待値を反転させること</b>（countNewer も 0 になるべき）。
+     * <p>数えた件数が実際に一覧へ出る件数と一致することを、この2つを並べて確認する。
      */
     @Test
-    @DisplayName("#230 countNewerは退会ユーザーの投稿を数えるが、findTimelineは返さない（Issue #44）")
-    void 新着件数と一覧が食い違う() {
+    @DisplayName("#230 countNewerは退会ユーザーの投稿を数えない（findTimelineと一致する）")
+    void 新着件数と一覧が一致する() {
       long me = fixtures.user("alice");
       long gone = fixtures.user("bob");
       long base = fixtures.post(me, "基準");
@@ -205,9 +205,25 @@ class PostMapperTest extends AbstractIntegrationTest {
       long newCount = postMapper.countNewer(TimelineTab.ALL, me, base);
       List<PostRow> rows = postMapper.findTimeline(TimelineTab.ALL, me, null, null, 100);
 
-      // 現状: カウントは1、一覧は0件（基準の投稿より新しいものは無い）
-      assertThat(newCount).isEqualTo(1);
+      // 退会者の投稿は数えず、一覧にも出ない
+      assertThat(newCount).isZero();
       assertThat(rows).extracting(PostRow::id).containsExactly(base);
+    }
+
+    /** #230b 退会していない他人の新しい投稿は、これまでどおり数える（修正で数え漏らしていないこと）。 */
+    @Test
+    @DisplayName("#230b 在籍ユーザーの新しい投稿はcountNewerが数える")
+    void 在籍ユーザーの新着は数える() {
+      long me = fixtures.user("alice");
+      long other = fixtures.user("bob");
+      long base = fixtures.post(me, "基準");
+      long newer = fixtures.post(other, "他人の新しい投稿");
+
+      long newCount = postMapper.countNewer(TimelineTab.ALL, me, base);
+      List<PostRow> rows = postMapper.findTimeline(TimelineTab.ALL, me, null, null, 100);
+
+      assertThat(newCount).isEqualTo(1);
+      assertThat(rows).extracting(PostRow::id).containsExactly(newer, base);
     }
   }
 }
