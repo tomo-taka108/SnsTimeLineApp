@@ -1444,6 +1444,88 @@ ORDER BY
 
 ---
 
+## D-62 構造化ログはSpring Boot標準のstructured loggingで出し、形式はECSにする
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-09 |
+| **論点** | Datadog連携を見据え、ログをJSON構造化するにあたり、何を使って出力するか（Issue #52） |
+| **選択肢** | **A. Spring Boot標準のstructured logging（ECS形式）** / B. logstash-logback-encoder / C. 自作Layout |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**理由**
+
+- **追加依存が要らない。** Spring Boot 4.1.0（Spring Framework 7）は `logging.structured.format.console` を標準で持ち、ECS / GELF / Logstashの3形式から選べる。BはJava/Kotlinで長らく定番のライブラリだが、Boot標準機能と役割が重複する。
+- **ECSはDatadogがそのまま解釈できる。** `@timestamp` / `log.level` / `service.name` などのフィールド名が規格として定義済みで、Datadog側のログパイプラインとの相性がよい。
+- **MDCの中身が自動的にトップレベルへ出る。** `requestId` / `userId` のために追加のマッピング設定を書く必要がない。
+- **C（自作）は却下。** エスケープ漏れ・改行混入など自作特有の落とし穴が多く、学習効果に対してリスクが見合わない。
+
+**併せて決めたこと**: **開発中はプレーンテキスト、本番相当のときだけJSON**にする。環境変数 `LOG_STRUCTURED_FORMAT` の既定値を空文字にし、明示的に `ecs` を指定したときだけJSON化する。JSONが常時流れると開発中に読みにくくなるため。
+
+**影響範囲**: [backend/src/main/resources/application.yml](../backend/src/main/resources/application.yml) / `.env.example` / [12_logging_and_operations.md](12_logging_and_operations.md) 3章
+
+---
+
+## D-63 リクエストIDはサーバーで発番し、MDC・レスポンスヘッダ・エラーレスポンスの3箇所に出す
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-09 |
+| **論点** | ユーザーが見たエラー画面とサーバーログの該当行を突き合わせる仕組みが無かった。リクエストIDをどこまで露出するか（Issue #52） |
+| **選択肢** | **A. MDC・レスポンスヘッダ（`X-Request-Id`）・エラーレスポンス（`requestId`）の3箇所すべてに出す** / B. ヘッダのみ / C. ログのみ |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**理由**
+
+- **Bだけでは足りない。** ヘッダだけでは、ユーザーが「エラーが出た」と報告する際に開発者ツールを開いてヘッダを確認する必要があり、非現実的。
+- **Cだけでは相関できない。** ログにだけ出しても、そのリクエストIDをユーザーの手元から取得する手段が無ければ意味がない。
+- **`ErrorResponse.requestId` に出すことで、画面にIDをそのまま表示できる。** 「エラーが発生しました（ID: xxxx）。このIDをお伝えください」という導線が作れる（UI表示自体は本PRの範囲外。型は[frontend/src/api/types.ts](../frontend/src/api/types.ts)に追加済み）。
+
+**外部から受け取ったリクエストIDは検証してから使う（重要）**
+
+`X-Request-Id` ヘッダはクライアントが自由に設定できる値であり、無検証でそのままMDC・ログへ
+書き込むと、改行文字を仕込んだ値でログ行を偽造される（ログインジェクション）。
+**英数字とハイフンのみ・64文字以内**に限定して検証し、外れる値は自前でUUIDを発番し直す
+（[RequestIdFilter.java](../backend/src/main/java/com/example/snstimeline/common/logging/RequestIdFilter.java)）。
+
+**併せて決めたこと**: MDCは必ず `finally` でクリアする。Tomcatはスレッドを使い回すため、
+消し忘れると次のリクエストに前の人のリクエストID・ユーザーIDが漏れる。これが本設計で
+最も危険な失敗であるため、[11_test_design.md](11_test_design.md) 25章で専用のテスト（#466）を書いた。
+
+**影響範囲**: `backend/src/main/java/com/example/snstimeline/common/logging/`（新設）/ [ErrorResponse.java](../backend/src/main/java/com/example/snstimeline/common/ErrorResponse.java) / [SecurityConfig.java](../backend/src/main/java/com/example/snstimeline/config/SecurityConfig.java) / [05_api_design.md](05_api_design.md) 1.3 / [frontend/src/api/types.ts](../frontend/src/api/types.ts)
+
+---
+
+## D-64 Datadogへはアプリから直接送らず、標準出力をAgentに回収させる
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-09 |
+| **論点** | Datadogへのログ転送経路をどう設計するか（Issue #52） |
+| **選択肢** | **A. 標準出力 → Datadog Agentが回収** / B. アプリからDatadog APIへ直接HTTP送信 / C. CloudWatch Logs経由でDatadogのAWSインテグレーションに取り込む |
+| **決定** | **A** |
+| **状態** | 決定済み |
+
+**理由**
+
+- **アプリにDatadogの依存・APIキーを持たせずに済む。** Bを選ぶとアプリのコードとデプロイ設定にDatadog固有の秘密情報が入り、ローカル開発環境と本番相当環境でアプリの振る舞いが分岐する。Aならアプリは標準出力にJSONを書くだけで、Datadogの存在を知らない。
+- **送信失敗時のバッファリング・リトライをAgentに任せられる。** アプリ自身が送信責任を持つと、Datadog側の障害がアプリの処理速度やメモリに影響しうる。
+- **CloudWatch経由（C）と二者択一にしない。** 標準出力に出す設計は、Datadog AgentでもCloudWatch Logs Agentでも回収できる。[10_infrastructure.md](10_infrastructure.md)の既存記載（CloudWatch）と本設計は対立せず、どちらの監視サービスを選ぶかは実際のAWS構築時（D-21、未決）に決めればよい。
+
+**06_non_functional.md 2章「監視: 行わない」を更新した記録**
+
+[06_non_functional.md](06_non_functional.md) 2章にはこれまで「監視: 行わない」とだけ書かれていた。
+本判断により「Datadogを前提に設計する」へ更新した。これは既存の判断を**撤回**したのではなく、
+**前提が変わった**ための更新である（CLAUDE.md 7.4）。「監視を行わない」という判断自体は
+学習用途としては合理的だったが、本Issueでログ運用の設計に着手したことで「設計はしておくが、
+実運用はAWS構築後」という一段階詳細な状態に更新した。
+
+**影響範囲**: [06_non_functional.md](06_non_functional.md) 2章 / [10_infrastructure.md](10_infrastructure.md) 1.1 / [12_logging_and_operations.md](12_logging_and_operations.md)（新設）
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

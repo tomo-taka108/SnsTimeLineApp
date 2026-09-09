@@ -20,6 +20,7 @@ X/Twitter風SNSアプリ（学習目的）の要件定義ドキュメント一�
 | 09 | [09_decision_log.md](09_decision_log.md) | 設計判断ログ（なぜこうしたか） | すべて | Fixed |
 | 10 | [10_infrastructure.md](10_infrastructure.md) | インフラ構成（AWS想定）。**構築するかは未決** | インフラ担当 | **Draft** |
 | 11 | [11_test_design.md](11_test_design.md) | テストケース表（同値分割・境界値・デシジョンテーブル） | すべての実装者 | 作成中 |
+| 12 | [12_logging_and_operations.md](12_logging_and_operations.md) | ログ運用・監視・障害対応。構造化ログ・リクエストID・Datadog連携の設計 | すべての実装者 | Fixed |
 | — | **[API仕様書（Swagger UI）](https://tomo-taka108.github.io/SnsTimeLineApp/api/)** | **実装から自動生成**したエンドポイント仕様。更新手順は [api/README.md](api/README.md) | すべての実装者 | 自動生成 |
 
 ---
@@ -145,8 +146,8 @@ flowchart TD
 | 記法 | 用途 | 使用箇所 | 枚数 |
 |---|---|---|---|
 | `erDiagram` | テーブル間のリレーション・カーディナリティ | 04 | 1 |
-| `flowchart` | 画面遷移・システム構成・ユースケース概観 | 01, 03（2枚）, 07（2枚）, 10（3枚）, 00 | 9 |
-| `sequenceDiagram` | 時系列の相互作用 | 05 | 4 |
+| `flowchart` | 画面遷移・システム構成・ユースケース概観 | 01, 03（2枚）, 07（2枚）, 10（3枚）, 12, 00 | 10 |
+| `sequenceDiagram` | 時系列の相互作用 | 05, 12 | 5 |
 
 **判断基準**
 
@@ -198,7 +199,7 @@ flowchart TD
 
 ## 8. 要件定義フェーズ完了チェックリスト
 
-- [x] `docs/` 配下に10ファイルが存在し、本書からすべてリンクされている
+- [x] `docs/` 配下に13ファイルが存在し、本書からすべてリンクされている
 - [x] 全機能（35件）に機能IDと優先度が付いている
 - [x] MVP機能（27件）だけで「登録→ログイン→投稿→TL閲覧→いいね→コメント→フォロー→フォロー中TL」が成立する
 - [x] 全画面（12画面 + 3モーダル）に画面IDとパスが振られ、遷移図に登場している
@@ -229,6 +230,8 @@ flowchart TD
 | 10_infrastructure | 1章 図1 ネットワーク構成（Multi-AZ） | `flowchart` |
 | 10_infrastructure | 1章 図2 マネージドサービス連携 | `flowchart` |
 | 10_infrastructure | 2章 学習用の最小構成 | `flowchart` |
+| 12_logging_and_operations | 4章 リクエストIDの流れ | `sequenceDiagram` |
+| 12_logging_and_operations | 6.1 Datadogへの転送経路 | `flowchart` |
 
 ---
 

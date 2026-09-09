@@ -108,7 +108,7 @@ flowchart LR
 | 画像ストレージ | **S3** | — | 投稿画像・プロフィール画像の実体。**決定済み事項** |
 | 外向き通信 | NAT Gateway | Public Subnet | Private SubnetのEC2がyum/Maven等を取りに行くため |
 | 秘密情報 | Secrets Manager | — | `DB_PASSWORD` / `JWT_SECRET`。[07_architecture.md](07_architecture.md) 5章の環境変数の置き場所 |
-| ログ・監視 | CloudWatch | — | アプリログとメトリクス |
+| ログ・監視 | CloudWatch **または Datadog** | — | アプリログとメトリクス。ログの構造化・相関ID・Datadog連携の設計は [12_logging_and_operations.md](12_logging_and_operations.md) 参照。どちらを採るかはD-21（AWS構築するか自体が未決）と合わせて決定する |
 
 ### 1.2 サブネットを3層に分ける理由
 

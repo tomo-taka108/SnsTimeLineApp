@@ -144,7 +144,7 @@ git config --global --unset alias.sync   # 解除
 このアプリは学習目的のSNSであり、ユーザーの**メールアドレス・パスワード**という認証情報を扱う。
 
 - **パスワードは必ず BCrypt でハッシュ化して保存する。平文で保存しない**
-- **ログ・エラーメッセージ・一時ファイルに、パスワード・JWT・メールアドレスを出力しない**（[docs/06_non_functional.md](docs/06_non_functional.md) 5.2）
+- **ログ・エラーメッセージ・一時ファイルに、パスワード・JWT・メールアドレスを出力しない**（[docs/06_non_functional.md](docs/06_non_functional.md) 5.2、運用・監視・障害対応は[docs/12_logging_and_operations.md](docs/12_logging_and_operations.md)）
 - **`email` を検索対象にもAPIレスポンスにも含めない。** アカウント列挙を招く（[docs/04_data_model.md](docs/04_data_model.md) 6.5）
 - サンプルデータ・テストデータには実在の個人名・実在するメールアドレスを使用しないこと（`example.com` ドメインを使う）
 - `.env` と `uploads/` は**絶対にコミットしない**（`.gitignore` で除外済み）
