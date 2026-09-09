@@ -161,24 +161,35 @@ class CommentMapperTest extends AbstractIntegrationTest {
     }
 
     /**
-     * #239 <b>現状の挙動を固定している（Issue #44 ③）。</b>
+     * #239 親投稿が削除済みならコメントを返さないこと（Issue #44 ③ の修正を固定する）。
      *
-     * <p>{@code findByPostId} はコメント自身と投稿者の論理削除は見るが、<b>親投稿が削除済みかは見ない</b>。 現状は {@code
-     * CommentService.getComments} が先に投稿の存在を確認して404を返すため実害は無いが、 その順序が変わると削除済み投稿のコメントが漏れる。
-     *
-     * <p><b>修正時はこのテストの期待値を反転させること。</b>
+     * <p>かつて {@code findByPostId} はコメント自身と投稿者の論理削除しか見ておらず、 <b>親投稿が削除済みかを見ていなかった</b>。{@code
+     * CommentService.getComments} が先に投稿の存在を 確認して404を返すため実害は無かったが、その順序が変わると削除済み投稿のコメントが漏れる。
+     * SQL単体でも保証されるよう posts のJOINを足した。
      */
     @Test
-    @DisplayName("#239 親投稿が削除済みでもコメントは返る（Issue #44）")
-    void 親投稿が削除済みでもコメントは返る() {
+    @DisplayName("#239 親投稿が削除済みならコメントを返さない")
+    void 親投稿が削除済みならコメントを返さない() {
       long author = fixtures.user("alice");
       long postId = fixtures.post(author, "投稿");
-      long commentId = fixtures.comment(postId, author, "コメント");
+      fixtures.comment(postId, author, "コメント");
       fixtures.softDeletePost(postId);
 
       List<CommentRow> rows = commentMapper.findByPostId(postId, null, null, NO_LIMIT);
 
-      // 現状: 親が消えていてもコメントは返る
+      assertThat(rows).isEmpty();
+    }
+
+    /** #239b 親投稿が生きていれば、これまでどおり返る（修正で返し漏らしていないこと）。 */
+    @Test
+    @DisplayName("#239b 親投稿が生きていればコメントは返る")
+    void 親投稿が生きていればコメントは返る() {
+      long author = fixtures.user("alice");
+      long postId = fixtures.post(author, "投稿");
+      long commentId = fixtures.comment(postId, author, "コメント");
+
+      List<CommentRow> rows = commentMapper.findByPostId(postId, null, null, NO_LIMIT);
+
       assertThat(rows).extracting(CommentRow::id).containsExactly(commentId);
     }
   }

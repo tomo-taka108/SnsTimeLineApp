@@ -34,10 +34,15 @@
     タイムラインとは逆に古い順（ASC）。カーソルの比較も
     (c.created_at, c.id) &gt; (:cursorCreatedAt, :cursorId) と不等号の向きが逆になる点に注意。
   -->
+  <!--
+    親投稿の論理削除もここで見る（#44 ③）。Service が先に投稿の存在を確認して404を返すため
+    現状は二重の確認になるが、SQL 単体で「削除済み投稿のコメントを返さない」ことを保証する。
+  -->
   <select id="findByPostId" resultType="com.example.snstimeline.comment.CommentRow">
     SELECT <include refid="rowColumns"/>
     FROM comments c
     JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
+    JOIN posts p ON p.id = c.post_id AND p.deleted_at IS NULL
     WHERE c.post_id = #{postId}
       AND <include refid="activeOnly"/>
     <if test="cursorCreatedAt != null">

@@ -78,9 +78,14 @@
     id は BIGSERIAL の単調増加なので、created_at を使わずに新着判定できる
     （docs/09_decision_log.md D-31）。
   -->
+  <!--
+    findTimeline と同じ絞り込みにすること。JOIN を落とすと退会ユーザーの投稿が
+    「新着1件」と数えられ、バナーを押しても一覧に出てこない（#44 ①）。
+  -->
   <select id="countNewer" resultType="long">
     SELECT COUNT(*)
     FROM posts p
+    JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
     WHERE <include refid="activeOnly"/>
     <if test="tab.name() == 'FOLLOWING'">
       AND ( p.user_id = #{meId}

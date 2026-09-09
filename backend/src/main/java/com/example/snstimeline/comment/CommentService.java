@@ -41,9 +41,10 @@ public class CommentService {
   @Transactional(readOnly = true)
   public CursorPage<CommentSummary> getComments(
       Long meId, Long postId, Integer limitParam, String cursor) {
+    // limit の検証を先に行う（#37, D-60）。不正なリクエストはDBを引く前に弾く。
+    int limit = clampLimit(limitParam);
     postMapper.findById(postId).orElseThrow(NotFoundException::new);
 
-    int limit = clampLimit(limitParam);
     CursorCodec.Cursor decoded = cursor == null ? null : CursorCodec.decode(cursor);
     var cursorCreatedAt = decoded == null ? null : decoded.createdAt();
     var cursorId = decoded == null ? null : decoded.id();

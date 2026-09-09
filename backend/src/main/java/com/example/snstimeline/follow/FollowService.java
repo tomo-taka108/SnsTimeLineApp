@@ -76,8 +76,9 @@ public class FollowService {
   @Transactional(readOnly = true)
   public CursorPage<UserListItem> getFollowing(
       Long meId, Long userId, Integer limitParam, String cursor) {
-    userMapper.findById(userId).orElseThrow(NotFoundException::new);
+    // limit の検証を先に行う（#37, D-60）。不正なリクエストはDBを引く前に弾く。
     int limit = clampLimit(limitParam);
+    userMapper.findById(userId).orElseThrow(NotFoundException::new);
     CursorCodec.Cursor decoded = cursor == null ? null : CursorCodec.decode(cursor);
     List<FollowRow> rows =
         followMapper.findFollowing(
@@ -92,8 +93,9 @@ public class FollowService {
   @Transactional(readOnly = true)
   public CursorPage<UserListItem> getFollowers(
       Long meId, Long userId, Integer limitParam, String cursor) {
-    userMapper.findById(userId).orElseThrow(NotFoundException::new);
+    // limit の検証を先に行う（#37, D-60）。不正なリクエストはDBを引く前に弾く。
     int limit = clampLimit(limitParam);
+    userMapper.findById(userId).orElseThrow(NotFoundException::new);
     CursorCodec.Cursor decoded = cursor == null ? null : CursorCodec.decode(cursor);
     List<FollowRow> rows =
         followMapper.findFollowers(
