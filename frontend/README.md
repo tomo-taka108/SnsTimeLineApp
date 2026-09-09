@@ -27,7 +27,7 @@ npm test                                # Vitest（自動テスト）
 
 ## テスト
 
-Vitest + jsdom + React Testing Library。**142ケース**。
+Vitest + jsdom + React Testing Library。**150ケース**。
 
 | 対象 | ケース表 |
 |---|---|
