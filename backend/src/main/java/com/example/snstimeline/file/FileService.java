@@ -11,6 +11,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import javax.imageio.ImageIO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,8 @@ import org.springframework.web.multipart.MultipartFile;
 /** 画像アップロード・配信の業務ロジック（docs/05_api_design.md #25, #26）。 */
 @Service
 public class FileService {
+
+  private static final Logger log = LoggerFactory.getLogger(FileService.class);
 
   private final FileMapper fileMapper;
   private final FileStorageService storageService;
@@ -41,14 +45,18 @@ public class FileService {
   @Transactional
   public UploadFileResponse upload(Long meId, MultipartFile file) {
     if (file == null || file.isEmpty()) {
+      log.warn("画像アップロード拒否 reason=EMPTY");
       throw new ApiException(ErrorCode.VALIDATION_ERROR);
     }
     if (file.getSize() > maxSizeBytes) {
+      log.warn("画像アップロード拒否 reason=TOO_LARGE sizeBytes={}", file.getSize());
       throw new ApiException(ErrorCode.FILE_TOO_LARGE);
     }
 
     ImageType imageType = ImageType.fromContentType(file.getContentType());
     if (imageType == null) {
+      // ファイル名は個人情報になりうるため出さない（実名を含むファイル名を付ける利用者がいる）
+      log.warn("画像アップロード拒否 reason=UNSUPPORTED_CONTENT_TYPE");
       throw new ApiException(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
     }
 
@@ -56,6 +64,7 @@ public class FileService {
     // Content-Type は送信側が自由に名乗れるため、実体と一致するかを必ず確かめる
     // （docs/06_non_functional.md 3.5）
     if (!imageType.matches(content)) {
+      log.warn("画像アップロード拒否 reason=MAGIC_BYTES_MISMATCH");
       throw new ApiException(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
     }
 
@@ -75,6 +84,12 @@ public class FileService {
             meId,
             null);
     Long fileId = fileMapper.insert(stored);
+    log.info(
+        "画像アップロード fileId={} storageType={} sizeBytes={} contentType={}",
+        fileId,
+        storageService.getStorageType(),
+        content.length,
+        imageType.contentType());
     return new UploadFileResponse(
         fileId, UploadFileResponse.urlOf(fileId), stored.width(), stored.height());
   }
