@@ -3,6 +3,7 @@ package com.example.snstimeline.follow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -273,25 +274,27 @@ class FollowServiceTest {
   class Listing {
 
     /**
-     * #112 <b>Issue #37 の対象。方針検討中のため現状の挙動を固定する。</b> {@code CommentService} と同じ「存在チェック→limit検証」の順。
-     * {@code PostService} は逆順（limit検証→存在チェック）であり、この不整合自体が Issue #37。
+     * #112 <b>Issue #37 の修正を固定する。</b> かつては「存在チェック→limit検証」の順で、同じ状況でも {@code PostService}
+     * は400、こちらは404と結果が 分かれていた。D-60でバリデーション優先に統一した。
+     *
+     * <p>DBを引く前に弾くため、{@code userMapper.findById} が呼ばれないことも併せて確認する。
      */
     @Test
-    @DisplayName("#112 対象ユーザーなし＋limit不正が重なると404（400ではない。Issue #37 で方針検討中）")
-    void 対象なしとlimit不正が重なると404が優先される() {
-      when(userMapper.findById(USER_ID)).thenReturn(Optional.empty());
-
+    @DisplayName("#112 対象ユーザーなし＋limit不正が重なると400（バリデーション優先。D-60）")
+    void 対象なしとlimit不正が重なると400が優先される() {
       assertThatThrownBy(() -> followService.getFollowing(ME_ID, USER_ID, 999, null))
-          .isInstanceOf(NotFoundException.class)
+          .isInstanceOf(ApiException.class)
           .extracting(e -> ((ApiException) e).getErrorCode())
-          .isEqualTo(ErrorCode.NOT_FOUND);
+          .isEqualTo(ErrorCode.VALIDATION_ERROR);
+
+      // 不正なリクエストなので、存在確認のDBアクセスまで到達しない
+      verify(userMapper, never()).findById(anyLong());
     }
 
     @Test
     @DisplayName("#113 limit=0は400")
     void limitが0なら400() {
-      givenUserExists();
-
+      // 存在確認より先に弾かれるため、ユーザーの用意は不要（D-60）
       assertThatThrownBy(() -> followService.getFollowing(ME_ID, USER_ID, 0, null))
           .isInstanceOf(ApiException.class)
           .extracting(e -> ((ApiException) e).getErrorCode())
@@ -301,8 +304,6 @@ class FollowServiceTest {
     @Test
     @DisplayName("#115 limit=51は400")
     void limitが51なら400() {
-      givenUserExists();
-
       assertThatThrownBy(() -> followService.getFollowing(ME_ID, USER_ID, 51, null))
           .isInstanceOf(ApiException.class)
           .extracting(e -> ((ApiException) e).getErrorCode())

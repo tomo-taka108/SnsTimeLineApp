@@ -2,6 +2,7 @@ package com.example.snstimeline.comment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -285,22 +286,23 @@ class CommentServiceTest {
     }
 
     /**
-     * #98 <b>PostServiceTest #80 との差。あちらは同じ状況で400を返す。</b>
+     * #98 <b>PostServiceTest #80 と同じ結果になること（Issue #37 の修正を固定する）。</b>
      *
-     * <p>CommentService は存在チェックが clampLimit より先のため、「存在しない投稿＋不正なlimit」では 400ではなく404になる。どちらが正しいかは
-     * Issue #37 で方針検討中のため、<b>現時点の挙動をそのまま記録</b>する。 方針が決まったらこのテストごと変更する。
+     * <p>かつては存在チェックが clampLimit より先だったため、「存在しない投稿＋不正なlimit」で PostService は400、CommentService
+     * は404と、同じ状況で結果が分かれていた。 D-60でバリデーション優先に統一した。
+     *
+     * <p>DBを引く前に弾くため、{@code postMapper.findById} が呼ばれないことも併せて確認する。
      */
     @Test
-    @DisplayName("#98 投稿が無い＋limitも不正なら404（400ではない。Issue #37 で方針検討中）")
-    void 投稿なしとlimit不正が重なると404が優先される() {
-      when(postMapper.findById(POST_ID)).thenReturn(Optional.empty());
-
-      // NotFoundException も ApiException のサブクラスだが、エラーコードは VALIDATION_ERROR
-      // ではなく NOT_FOUND になる。「limitが不正」ではなく「投稿が無い」が優先されたことの確認
+    @DisplayName("#98 投稿が無い＋limitも不正なら400（バリデーション優先。D-60）")
+    void 投稿なしとlimit不正が重なると400が優先される() {
       assertThatThrownBy(() -> commentService.getComments(ME_ID, POST_ID, 999, null))
-          .isInstanceOf(NotFoundException.class)
+          .isInstanceOf(ApiException.class)
           .extracting(e -> ((ApiException) e).getErrorCode())
-          .isEqualTo(ErrorCode.NOT_FOUND);
+          .isEqualTo(ErrorCode.VALIDATION_ERROR);
+
+      // 不正なリクエストなので、存在確認のDBアクセスまで到達しない
+      verify(postMapper, never()).findById(anyLong());
     }
 
     @Test
