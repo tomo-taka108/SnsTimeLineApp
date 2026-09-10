@@ -45,6 +45,11 @@ export type ErrorResponse = {
   path: string;
   /** バリデーションエラー（400）のときだけ存在する */
   errors?: FieldErrorItem[];
+  /**
+   * サーバーログと突き合わせるためのリクエストID（docs/12_logging_and_operations.md 4章、D-63）。
+   * レスポンスヘッダ X-Request-Id と同じ値。UI表示は本PRの範囲外で、型のみ追加する。
+   */
+  requestId?: string;
 };
 
 /** エラーコード（docs/05_api_design.md 1.3 ＋ D-29 の INVALID_REFRESH_TOKEN、D-39 の SELF_FOLLOW_NOT_ALLOWED） */

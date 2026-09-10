@@ -11,6 +11,9 @@ import com.example.snstimeline.common.UnauthorizedException;
 import com.example.snstimeline.user.User;
 import com.example.snstimeline.user.UserMapper;
 import com.example.snstimeline.user.dto.UserSummary;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 /** 認証の業務ロジック。トランザクション境界はこの層に置く（docs/07_architecture.md 2.1）。 */
 @Service
 public class AuthService {
+
+  private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
   private final UserMapper userMapper;
   private final PasswordEncoder passwordEncoder;
@@ -65,6 +70,7 @@ public class AuthService {
       throw toConflict(e);
     }
 
+    log.info("新規登録 userId={}", userId);
     return issueTokens(userId, new UserSummary(userId, user.username(), user.displayName(), null));
   }
 
@@ -73,13 +79,19 @@ public class AuthService {
   public AuthResponse login(LoginRequest request) {
     // メールが存在しない場合とパスワードが違う場合で、レスポンスを区別しない。
     // アカウントの存在を推測させないため（docs/06_non_functional.md 3.1）。
-    User user =
+    // ログについても同じ理由でメールアドレスは出さない（06 5.2）。
+    Optional<User> user =
         userMapper
             .findByEmail(request.email())
-            .filter(u -> passwordEncoder.matches(request.password(), u.passwordHash()))
-            .orElseThrow(() -> new UnauthorizedException(ErrorCode.INVALID_CREDENTIALS));
+            .filter(u -> passwordEncoder.matches(request.password(), u.passwordHash()));
 
-    return issueTokens(user.id(), UserSummary.from(user));
+    if (user.isEmpty()) {
+      log.warn("ログイン失敗");
+      throw new UnauthorizedException(ErrorCode.INVALID_CREDENTIALS);
+    }
+
+    log.info("ログイン成功 userId={}", user.get().id());
+    return issueTokens(user.get().id(), UserSummary.from(user.get()));
   }
 
   /**
@@ -96,6 +108,7 @@ public class AuthService {
     // アクセストークンは短命だが、リフレッシュを許すと実質的に無期限で
     // アクセスし続けられてしまうため、ここで断ち切る。
     if (userMapper.findById(rotated.userId()).isEmpty()) {
+      log.warn("退会済みユーザーのトークン再発行を拒否 userId={}", rotated.userId());
       throw new UnauthorizedException(ErrorCode.INVALID_REFRESH_TOKEN);
     }
 
@@ -116,6 +129,7 @@ public class AuthService {
   @Transactional
   public void logout(Long userId) {
     refreshTokenService.revokeAll(userId);
+    log.info("ログアウト userId={}", userId);
   }
 
   /** #3 現在のユーザー情報（F-AU-04）。 */

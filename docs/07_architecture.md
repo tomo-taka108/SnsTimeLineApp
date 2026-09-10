@@ -119,7 +119,12 @@ com.example.snstimeline
     ├─ GlobalExceptionHandler.java  エラーレスポンスの統一
     ├─ ErrorCode.java               エラーコードのenum
     ├─ CursorPage.java              ページネーションの共通ラッパー
-    └─ CursorCodec.java             カーソルのエンコード/デコード
+    ├─ CursorCodec.java             カーソルのエンコード/デコード
+    └─ logging/                     リクエストID・ユーザーIDのMDC付与（12_logging_and_operations.md 4章）
+        ├─ RequestIdFilter.java     リクエストIDの発番・検証・レスポンスヘッダ付与
+        ├─ UserIdFilter.java        認証済みユーザーIDのMDC付与
+        ├─ AccessLogFilter.java     1リクエスト1行のアクセスログ
+        └─ RequestContext.java      MDCの読み出し口
 ```
 
 **機能ごとにパッケージを切る（パッケージ・バイ・フィーチャー）。** `controller` / `service` / `repository` で切る（レイヤー別）と、1つの機能を変更するたびに複数のパッケージを行き来することになる。
@@ -290,6 +295,9 @@ if (!post.userId().equals(currentUserId)) {
 | `APP_UPLOAD_MAX_SIZE_MB` | `5` | 1ファイルの上限 |
 | `APP_UPLOAD_MAX_COUNT` | `1` | 1投稿あたりの画像枚数（MVP=1、Phase2=4） |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | 許可オリジン |
+| `LOG_STRUCTURED_FORMAT` | 空 / `ecs` | 空ならプレーンテキスト、`ecs` ならJSON構造化ログ（[12_logging_and_operations.md](12_logging_and_operations.md) 3章、D-62） |
+| `LOG_LEVEL_APP` | `INFO` | `com.example.snstimeline` パッケージのログレベル |
+| `APP_ENV` | `local` | ログに埋め込む環境名。Datadogでの絞り込みに使う |
 
 **秘密情報は `.env` に置き、`.gitignore` に含める。** `application.yml` にはデフォルト値のみ書く。
 

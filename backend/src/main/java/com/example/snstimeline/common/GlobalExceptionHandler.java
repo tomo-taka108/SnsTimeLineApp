@@ -73,6 +73,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(MethodArgumentTypeMismatchException.class)
   public ResponseEntity<ErrorResponse> handleTypeMismatch(
       MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+    log.warn("パラメータの型不一致 param={} path={}", e.getName(), request.getRequestURI());
     return build(ErrorCode.VALIDATION_ERROR, "パラメータの形式が正しくありません", request, null);
   }
 
@@ -96,6 +97,10 @@ public class GlobalExceptionHandler {
     ErrorCode code = e.getErrorCode();
     if (code.getStatus().is4xxClientError()) {
       log.warn("業務エラー code={} path={}", code.name(), request.getRequestURI());
+    } else {
+      // 5xxのApiExceptionが無ログで消えないようにする。想定されるのはINTERNAL_ERRORのみだが、
+      // 将来のErrorCode追加に備えて4xx以外はすべてERRORにしておく（docs/12_logging_and_operations.md 2章）。
+      log.error("業務エラー code={} path={}", code.name(), request.getRequestURI());
     }
     return build(code, code.getDefaultMessage(), request, null);
   }

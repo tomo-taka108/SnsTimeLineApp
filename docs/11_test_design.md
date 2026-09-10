@@ -290,14 +290,18 @@
 | 20 | **Controller層**（認証・認可・エラーJSON） | 表・実HTTP | **実装完了**（41テスト） |
 | 23 | **フロントエンド**（純粋関数・APIクライアント） | 境界値・デシジョンテーブル・**呼び出し回数の検証** | **実装完了**（99テスト。ケース番号は #324〜#396g） |
 | 24 | **フロントエンド**（フック・コンポーネント） | 非同期・状態遷移・**RTL** | **実装完了**（51ケース） |
+| 25 | 構造化ログ・リクエストID・機密情報の非出力 | 単体（Mock）・**ログ内容の集合検証** | **実装完了**（19テスト。ケース番号は #460〜#478） |
 
 > **19〜20章で必須テスト項目（[06_non_functional.md](06_non_functional.md) 5.3）は 14/14 を達成した。**
 > 残り2項目（論理削除の除外・カーソルページネーション）は実SQLでしか検証できなかったもの。
 >
-> **23〜24章でフロントエンドを完走した（150ケース）。** バックエンド341本と合わせ、
+> **23〜24章でフロントエンドを完走した（150ケース）。** バックエンド360本と合わせ、
 > **E2E（実ブラウザの自動操作）を除く全層のテストが揃った。**
 > 残る `useInfiniteScroll` の `rootMargin` は、jsdomに `IntersectionObserver` が無いため
 > **E2Eでしか検証できない**（23.8 #10）。
+>
+> **25章はバックエンドのみ（19テスト）を追加したもので、フロントエンドのケース数（150）は
+> 変わらない。** バックエンドの合計は341本→360本になった。
 
 ---
 
@@ -1883,6 +1887,92 @@ Library を使ったコンポーネントテストは対象外とする（5章�
 
 ---
 
+## 25. 構造化ログ・リクエストID・機密情報の非出力（#460〜#478）
+
+対象:
+[RequestIdFilter.java](../backend/src/main/java/com/example/snstimeline/common/logging/RequestIdFilter.java) /
+[UserIdFilter.java](../backend/src/main/java/com/example/snstimeline/common/logging/UserIdFilter.java) /
+[AccessLogFilter.java](../backend/src/main/java/com/example/snstimeline/common/logging/AccessLogFilter.java) /
+`GlobalExceptionHandler` / `AuthService` / `FileService` / `S3FileStorageService` / `LocalFileStorageService`。
+テストクラス:
+`common.logging.RequestIdFilterTest` / `common.logging.UserIdFilterTest` / `common.logging.ObservabilityTest`。
+
+### 25.0 ログはテストしにくい
+
+6.0 / 19.0 / 23.0 が「層が変わると道具が変わる」ことを説明したのと同じ構図が、ここにもある。
+
+| | これまでの層 | **本章（ログ）** |
+|---|---|---|
+| 何を検証するか | 戻り値・例外・DBの状態 | **副作用として出た文字列** |
+| 検証の道具 | `assertThat(result)...` | ログ出力を捕まえる仕組みが要る |
+| 「正しさ」の形 | 1つの値が期待どおりか | **集合（全ログ行）のどれにも、あってはならない文字列が含まれないか** |
+
+ログはメソッドの戻り値ではなく副作用であるため、Logback の `ListAppender` をルートロガーに
+差し込み、テスト中に出たログ行を丸ごと集める方式を採る（`ObservabilityTest`）。単体で完結する
+`RequestIdFilter` / `UserIdFilter` は、`MockHttpServletRequest` / `MockFilterChain` を直接使う
+純粋な単体テストにする（Spring全体を起動すると、他のフィルタの副作用と混ざって検証しづらいため）。
+
+### 25.1〜25.2 MDCへの格納とログインジェクション対策（#460〜#471）
+
+| # | 対象 | 入力 | 期待 | 根拠 |
+|---|---|---|---|---|
+| 460 | RequestIdFilter | `X-Request-Id`ヘッダ無し | UUIDを自前で発番 | |
+| 461 | RequestIdFilter | 有効なヘッダ（英数字+ハイフン） | そのまま採用 | ALB/フロントからの伝播に備える |
+| **462** | RequestIdFilter | ヘッダに改行を含む値 | **破棄し自前で発番** | **ログインジェクション対策の中核**（D-63） |
+| 463 | RequestIdFilter | 65文字（境界外） | 破棄し自前で発番 | 境界値 |
+| 464 | RequestIdFilter | 64文字ちょうど（境界内） | そのまま採用 | #463と対 |
+| 465 | RequestIdFilter | 空文字 | 破棄し自前で発番 | |
+| **466** | RequestIdFilter | doFilter完了後 | **MDCからrequestIdが消えている** | **最も危険な失敗を防ぐテスト**（後述） |
+| 467 | RequestIdFilter | チェーンの内側 | MDCにrequestIdが入っている | #466と対（一時的にでも正しく入っていること） |
+| 468 | RequestIdFilter | 同一スレッドで2リクエスト連続実行 | 前のリクエストIDが漏れない | スレッド使い回しの再現 |
+| 469 | UserIdFilter | 認証済み（`AuthPrincipal`） | userIdがMDCに入る | |
+| 470 | UserIdFilter | 未認証 | MDCにuserIdのキー自体が入らない | ECS形式では値が無ければフィールドごと出ない |
+| 471 | UserIdFilter | doFilter完了後 | MDCからuserIdが消えている | RequestIdFilterと同じ理由 |
+
+> **★ #466 が本節で最も重要なテスト。** Tomcatはスレッドを使い回すため、`finally` でMDCを
+> 消し忘れると、次のリクエストに前の人のリクエストID・ユーザーIDが**別人のログとして**
+> 漏れる。この失敗はレビューで見逃されやすく（正常系は正しく動いて見えるため）、
+> かつ発生すると実害が大きい（個人情報の取り違え）。単体テストで固定する価値が最も高い箇所。
+
+### 25.3 リクエストIDの相関（#472〜#473）
+
+| # | 内容 | 期待 |
+|---|---|---|
+| 472 | 404レスポンスの`requestId`と`X-Request-Id`ヘッダ | **完全に一致する** |
+| 473 | 200系レスポンス | `X-Request-Id`ヘッダが付く（エラー時専用ではない） |
+
+### 25.4 機密情報の非出力（本章の中核、#474）
+
+> **CLAUDE.md 6章の「ログにパスワード・JWT・メールアドレスを出力しない」は、これまで
+> レビューでしか担保されていなかった。** 個別のログ文を1つずつ確認する方式には、
+> **新しいログ文を足したときに検証されない**という穴がある（#44③が「たまたま安全だった」のと
+> 同じ構造の危うさ）。
+
+#474は、signup → ログイン成功 → ログイン失敗 → 画像アップロード拒否 → 403、まで一通り
+HTTP経由で叩き、`ListAppender`で集めた全ログ行のどれにも、リクエストに含めた**平文パスワード・
+発行されたJWT・メールアドレス**の文字列が現れないことを確認する。個別の文言ではなく
+「集合全体を1箇所で見張る」形にすることで、将来ログ文が増えても穴が空かないようにしている。
+
+### 25.5 観測点が期待どおりのレベルで出る（#475〜#478）
+
+| # | 内容 | 確認する点 |
+|---|---|---|
+| 475 | ログイン成功 | INFOで1行出る |
+| 476 | ログイン失敗 | WARNで出て、**メールアドレスを含まない** |
+| 477 | 画像アップロード成功 | INFOで`fileId`等を含めて出る |
+| 478 | アクセスログ | `method`/`path`/`status`/`durationMs`付きで1リクエスト1行出る |
+
+### 25.6 ミューテーション
+
+| # | 対象 | 壊した内容 | 結果 |
+|---|---|---|---|
+| 1 | `RequestIdFilter` | `finally`の`MDC.remove(...)`を削除 | ✅ #466が赤（MDCにrequestIdが残る） |
+| 2 | `RequestIdFilter` | `SAFE_REQUEST_ID`による検証を無効化（無条件で外部値を採用） | ✅ #462・#463・#465が赤 |
+
+**確認後、実装はすべて元に戻した**（`grep -n "MUTATION" backend/src/main/java/com/example/snstimeline/common/logging/RequestIdFilter.java` が何も出力しないことを確認済み）。
+
+---
+
 ## 22. 参照
 
 | 文書 | 内容 |
@@ -1893,4 +1983,8 @@ Library を使ったコンポーネントテストは対象外とする（5章�
 | [09_decision_log.md](09_decision_log.md) D-54 | テストDBに Testcontainers を採用した理由 |
 | [09_decision_log.md](09_decision_log.md) D-57 | フロントのテスト基盤に Vitest を採用した理由 |
 | [09_decision_log.md](09_decision_log.md) D-58 | テストを本番コードと同じ階層・検査対象に置く理由 |
+| [09_decision_log.md](09_decision_log.md) D-62 | 構造化ログにECS形式を採用した理由 |
+| [09_decision_log.md](09_decision_log.md) D-63 | リクエストIDをMDC・ヘッダ・エラーレスポンスの3箇所に出す理由 |
+| [09_decision_log.md](09_decision_log.md) D-64 | Datadogへの転送を標準出力→Agent経由にした理由 |
+| [12_logging_and_operations.md](12_logging_and_operations.md) | ログ運用・監視・障害対応の設計 |
 | [.claude/skills/quality-check/SKILL.md](../.claude/skills/quality-check/SKILL.md) | テスト実行手順 |

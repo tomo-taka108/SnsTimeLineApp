@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,8 @@ import org.springframework.stereotype.Service;
 @Service
 @ConditionalOnProperty(name = "app.storage.type", havingValue = "LOCAL", matchIfMissing = true)
 public class LocalFileStorageService implements FileStorageService {
+
+  private static final Logger log = LoggerFactory.getLogger(LocalFileStorageService.class);
 
   private final Path root;
 
@@ -32,6 +36,7 @@ public class LocalFileStorageService implements FileStorageService {
       Files.createDirectories(destination.getParent());
       Files.write(destination, content);
     } catch (IOException e) {
+      log.error("ローカルストレージ操作に失敗 op=store storageKey={}", storageKey, e);
       throw new UncheckedIOException("ファイルの保存に失敗しました", e);
     }
     return storageKey;
@@ -42,6 +47,7 @@ public class LocalFileStorageService implements FileStorageService {
     try {
       return Files.readAllBytes(resolve(storageKey));
     } catch (IOException e) {
+      log.error("ローカルストレージ操作に失敗 op=load storageKey={}", storageKey, e);
       throw new UncheckedIOException("ファイルの読み出しに失敗しました", e);
     }
   }
@@ -51,6 +57,7 @@ public class LocalFileStorageService implements FileStorageService {
     try {
       Files.deleteIfExists(resolve(storageKey));
     } catch (IOException e) {
+      log.error("ローカルストレージ操作に失敗 op=delete storageKey={}", storageKey, e);
       throw new UncheckedIOException("ファイルの削除に失敗しました", e);
     }
   }

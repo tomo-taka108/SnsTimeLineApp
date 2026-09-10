@@ -63,7 +63,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
   "path": "/api/v1/posts",
   "errors": [
     { "field": "body", "message": "本文は280文字以内で入力してください" }
-  ]
+  ],
+  "requestId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 }
 ```
 
@@ -75,6 +76,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
 | `message` | ○ | ユーザーに表示可能な日本語メッセージ |
 | `path` | ○ | リクエストパス |
 | `errors` | — | フィールド単位のエラー。バリデーションエラー時のみ |
+| `requestId` | ○ | サーバーログと突き合わせるためのリクエストID。レスポンスヘッダ `X-Request-Id` と同じ値（[12_logging_and_operations.md](12_logging_and_operations.md) 4章、D-63） |
 
 #### エラーコード一覧
 
