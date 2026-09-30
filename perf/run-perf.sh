@@ -93,7 +93,12 @@ cleanup() {
     warn "  docker compose exec db-perf psql -U ${DB_USER} -d ${DB_NAME}"
   fi
 
-  return $exit_code
+  # EXIT トラップの中で return すると、その戻り値がスクリプト全体の
+  # 終了ステータスを**上書きしてしまう**。閾値違反（k6 の exit 99）を
+  # 呼び出し元に伝えられないと thresholds が無意味になるため、
+  # 元の終了コードで明示的に exit し直す。
+  # （trap は既に発火済みなので、この exit で再帰することはない）
+  exit $exit_code
 }
 
 # EXIT / INT / TERM のすべてで掃除を走らせる。これが try/finally 相当。
@@ -127,15 +132,19 @@ if [ "$(psql_cmd "SELECT to_regclass('public.users') IS NOT NULL")" != "t" ]; th
   exit 1
 fi
 
-# 被試験アプリが起きているか
-if ! curl -sf -o /dev/null "${BASE_URL}/auth/login" -X POST \
-     -H 'Content-Type: application/json' -d '{}' 2>/dev/null; then
-  # 400 が返るのが正常（空ボディなので）。接続自体ができるかだけを見たい
-  if ! curl -s -o /dev/null --max-time 5 "${BASE_URL}/auth/login" 2>/dev/null; then
-    echo "エラー: アプリに接続できない（${BASE_URL}）" >&2
-    echo "  DB_URL=jdbc:postgresql://localhost:5433/${DB_NAME} ./mvnw spring-boot:run" >&2
-    exit 1
-  fi
+# 被試験アプリが起きているか。
+# 空ボディを POST すると 400 が返るのが正常なので、HTTP ステータスが
+# 返ってくること自体（= 接続できること）だけを見る。
+# curl -f は 400 を失敗扱いにしてしまうので使わない。
+app_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+  -X POST "${BASE_URL}/auth/login" \
+  -H 'Content-Type: application/json' -d '{}' 2>/dev/null || echo '000')"
+
+if [ "$app_status" = "000" ]; then
+  echo "エラー: アプリに接続できない（${BASE_URL}）" >&2
+  echo "  次を実行してアプリを起動すること:" >&2
+  echo "  DB_URL=jdbc:postgresql://localhost:5433/${DB_NAME} ./mvnw spring-boot:run" >&2
+  exit 1
 fi
 
 echo "OK（接続先: ${BASE_URL}）"
