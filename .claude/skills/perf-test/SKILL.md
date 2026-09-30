@@ -91,7 +91,7 @@ SCENARIO=perf/scenarios/timeline.ts    ./perf/run-perf.sh   # シナリオを選
 ## Step 4: 結果を読む
 
 ```
-http_req_duration{name:GET /timeline}: p(95)=13.07ms  ✓ 'p(95)<1000'
+http_req_duration{name:GET /timeline}: p(95)=11.59ms  ✓ 'p(95)<1000'
 http_req_failed......................: 0.00%
 ```
 

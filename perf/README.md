@@ -93,7 +93,7 @@ BCrypt ハッシュを再生成したい場合は、開発用DBで一度サイ�
 ## 結果の読み方
 
 ```
-http_req_duration{name:GET /timeline}: p(95)=13.07ms  ✓ 'p(95)<1000'
+http_req_duration{name:GET /timeline}: p(95)=11.59ms  ✓ 'p(95)<1000'
 http_req_failed......................: 0.00%
 ```
 
