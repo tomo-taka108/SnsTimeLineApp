@@ -18,5 +18,36 @@ services:
       timeout: 3s
       retries: 10
 
+  # 負荷試験専用のDB（docs/13_performance_test.md）。
+  #
+  # profiles を付けているため、通常の `docker compose up -d` では起動しない。
+  # 負荷試験のときだけ `docker compose --profile perf up -d db-perf` で足す。
+  # 日常の開発体験を変えないための措置（開発用DBと同居させると常にメモリを食う）。
+  #
+  # 上の db とは port・DB名・volume のすべてを分けている。負荷試験は
+  # 試験の前後で全テーブルを TRUNCATE するため、開発用データと同居させてはならない。
+  db-perf:
+    image: postgres:16
+    profiles: ["perf"]
+    environment:
+      POSTGRES_DB: snstimeline_perf
+      POSTGRES_USER: snsapp
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-perf:/var/lib/postgresql/data
+      # 後片付け用の truncate-all.sql をコンテナ内から参照する。
+      # コピーせずマウントするのは、テーブルを追加したときに片方が腐るのを防ぐため。
+      - ./backend/src/test/resources/sql:/perf-sql:ro
+      # シードデータのSQL（perf/seed/*.sql）も同様にマウントする
+      - ./perf/seed:/perf-seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snsapp -d snstimeline_perf"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   pgdata:
+  pgdata-perf:
