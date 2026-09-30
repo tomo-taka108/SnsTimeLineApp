@@ -57,6 +57,17 @@ export const options: Options = {
     'checks': ['rate>0.99'],
   },
 
+  /**
+   * 集計結果の表に出す統計量。
+   *
+   * 既定は avg/min/med/max/p(90)/p(95) で、p(99) を含まない。
+   * thresholds に 'p(99)<2000' を設定していても、その根拠となる
+   * 実際の p99 の数値は既定のままでは表にもHTMLレポートにも出ない
+   * （thresholdsは合否だけを判定し、表の見出しとは連動しない）。
+   * 「p99を記録する」という意図が可視化されないと無意味なので明示する。
+   */
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
+
   // 立ち上げ直後の JIT ウォームアップと接続プール確立を p95 に混ぜない
   discardResponseBodies: false,
 };
