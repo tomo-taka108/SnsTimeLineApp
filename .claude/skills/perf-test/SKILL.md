@@ -104,6 +104,15 @@ http_req_failed......................: 0.00%
 
 **閾値を満たさなかった場合**、`run-perf.sh` も非0で終了する（合否が呼び出し元に伝わる）。
 
+**グラフィカルなレポートも同時に出る。** `perf/results/summary.html` をブラウザで開くと、
+総リクエスト数・失敗数・閾値違反数がカードで、エンドポイントごとの応答時間分布が表で見られる。
+
+```bash
+start perf/results/summary.html   # Windows
+```
+
+実行のたびに上書きされる（`.gitignore` 済み）。詳細は [perf/README.md](../../../perf/README.md)。
+
 ## Step 5: 型検査（スクリプトを変更した場合）
 
 ```bash

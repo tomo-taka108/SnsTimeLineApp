@@ -108,4 +108,19 @@ http_req_failed......................: 0.00%
 > CPU を奪い合うため、数値は「このマシンでこの構成のとき」の値でしかない。
 > **前回との相対比較（退行検知）に使う。**
 
-結果の JSON は `perf/results/summary.json` に出る（`.gitignore` 済み）。
+### HTML レポート
+
+試験が終わると `perf/results/summary.html` が生成される。ダブルクリック（または
+ブラウザで開く）すると、グラフィカルなレポートが見られる。
+
+- 総リクエスト数 / 失敗リクエスト数 / 閾値違反数 / チェック失敗数がカードで一目瞭然
+- エンドポイントごとの応答時間（avg / min / med / max / p90 / p95）が表で見られる
+
+[benc-uk/k6-reporter](https://github.com/benc-uk/k6-reporter) を使っている
+（バージョン固定。`perf/lib/report.ts` を参照）。**実行時にインターネット接続が必要**
+（GitHub / jsDelivr からライブラリを取得するため）。オフラインでもテスト本体
+（合否判定）は実行できるが、レポート生成だけ失敗する。
+
+生データは `perf/results/summary.json` にも出る。どちらも `.gitignore` 済みで、
+**実行のたびに上書きされる**。複数回分を残したい場合は手動でコピーすること
+（例: `cp perf/results/summary.html perf/results/2026-09-30.html`）。

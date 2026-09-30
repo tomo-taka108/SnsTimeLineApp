@@ -1676,6 +1676,52 @@ k6 は npm のモジュール解決をしないため、`frontend/src` の型を
 
 ---
 
+## D-70 試験結果はk6-reporterでHTML化し、summary-exportとの二重出力にしない
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-09-30 |
+| **論点** | 負荷試験の結果を人間が見やすい形で確認できるようにするか（Issue #57フォローアップ） |
+| **選択肢** | A. ターミナル出力のみ / B. `k6 run --summary-export` でJSONだけ出す / **C. `handleSummary()` で JSON + HTML を出す** |
+| **決定** | **C**（[benc-uk/k6-reporter](https://github.com/benc-uk/k6-reporter) を使用、バージョン固定） |
+| **状態** | 決定済み |
+
+**理由**
+
+- **Aはその場限りで、あとから見返せない。** ターミナルのスクロールバックは残らないため、試験のたびに「速かった/遅かった」の記憶に頼ることになる。
+- **Bは機械可読だが人間には読みにくい。** JSON の生データを都度目視で追うのは非現実的。
+- **Cを採用。** k6 公式ドキュメントもコミュニティ製ツールとして紹介している `k6-reporter` を使い、`handleSummary()` から stdout・JSON・HTML の3つを同時に出す。総リクエスト数・失敗数・閾値違反数・チェック失敗数がカードで一目瞭然になり、エンドポイントごとの応答時間分布も表で見られる。
+
+**バージョンを `main` ではなくタグで固定する**
+
+`https://raw.githubusercontent.com/benc-uk/k6-reporter/3.0.4/dist/bundle.js` のように
+バージョンタグを指定している。`main` を使うと、向こうの更新で見た目やAPIが予告なく変わりうる。
+シードデータを `setseed()` で決定論的にしているのと同じ理由で、「結果を比較する道具」自体が
+実行のたびに変わってはならない。
+
+**`--summary-export` フラグは使わない**
+
+`k6 run` には `--summary-export=path.json` というJSON専用の出力フラグがあるが、
+これと `handleSummary()` の両方を使うと出力先の二重管理になる。`handleSummary()` に一本化した。
+
+**tscの型検査との折り合い**
+
+k6 はURLを直接importできるが、`tsc`（型検査用）はURLモジュールを解決できない。
+`perf/lib/external.d.ts` に最小限のアンビエント型宣言を用意して対処した
+（実体は実行時にk6がURLから取得するため、宣言は型情報のみで実装を持たない）。
+
+**オフライン時の挙動**
+
+`handleSummary()` の呼び出しは試験本体（thresholds の判定）が終わった**後**に走るため、
+オフラインでレポート生成が失敗しても、合否判定そのものには影響しない。
+
+**受け入れたトレードオフ**: 試験の実行に**インターネット接続が必要**になった
+（GitHub / jsDelivr からライブラリを取得するため）。ローカル専用のオフライン運用は想定していないため許容する。
+
+**影響範囲**: `perf/lib/report.ts`（新設） / `perf/lib/external.d.ts`（新設） / `perf/scenarios/timeline.ts` / `perf/run-perf.sh` / [13_performance_test.md](13_performance_test.md) 4.4 / [perf/README.md](../perf/README.md)
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

@@ -19,6 +19,7 @@ import { Trend } from 'k6/metrics';
 import type { Options } from 'k6/options';
 import type { CursorPage, PostSummary } from '../lib/types.ts';
 import { authHeaders, login, seedUserEmail } from '../lib/auth.ts';
+import { buildSummary } from '../lib/report.ts';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080/api/v1';
 
@@ -123,4 +124,16 @@ export default function (data: SetupData): void {
 
   // 実ユーザーの閲覧間隔を模す。これが無いと非現実的な連打になる
   sleep(1);
+}
+
+/**
+ * 試験終了後に1回だけ呼ばれる。ターミナルへの表示に加えて、
+ * results/summary.json（生データ）と results/summary.html
+ * （人間が見やすいレポート）を出力する。
+ *
+ * run-perf.sh が実行前に perf/results/ を作成しているため、
+ * このパスは常に書き込み可能な前提でよい。
+ */
+export function handleSummary(data: object): Record<string, string> {
+  return buildSummary(data, { title: 'タイムライン負荷試験' });
 }

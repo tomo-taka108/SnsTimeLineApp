@@ -186,9 +186,11 @@ export BASE_URL
 
 mkdir -p perf/results
 
+# JSON と HTML の出力は各シナリオの handleSummary()（perf/lib/report.ts）が
+# perf/results/ 配下に書く。--summary-export は使わない（二重管理を避けるため）。
 log "k6 を実行する（${SCENARIO}）"
 rc=0
-k6 run --summary-export=perf/results/summary.json "$SCENARIO" || rc=$?
+k6 run "$SCENARIO" || rc=$?
 
 # ---- ④ カウンタ整合の検証（TRUNCATE の前に行う）----------------------------
 
@@ -214,7 +216,8 @@ else
   log "結果: 不合格（閾値違反またはカウンタ不整合。exit=${rc}）"
 fi
 
-echo "サマリ: perf/results/summary.json"
+echo "サマリ（JSON）: perf/results/summary.json"
+echo "レポート（HTML）: perf/results/summary.html"
 
 # k6 の exit code をそのまま返す。
 # trap に上書きされて合否が伝わらないと thresholds が無意味になるため、
