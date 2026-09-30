@@ -21,6 +21,7 @@ X/Twitter風SNSアプリ（学習目的）の要件定義ドキュメント一�
 | 10 | [10_infrastructure.md](10_infrastructure.md) | インフラ構成（AWS想定）。**構築するかは未決** | インフラ担当 | **Draft** |
 | 11 | [11_test_design.md](11_test_design.md) | テストケース表（同値分割・境界値・デシジョンテーブル） | すべての実装者 | 作成中 |
 | 12 | [12_logging_and_operations.md](12_logging_and_operations.md) | ログ運用・監視・障害対応。構造化ログ・リクエストID・Datadog連携の設計 | すべての実装者 | Fixed |
+| 13 | [13_performance_test.md](13_performance_test.md) | パフォーマンステスト（負荷試験）。k6の選定理由・シナリオ・実測ベースライン | すべての実装者 | Fixed |
 | — | **[API仕様書（Swagger UI）](https://tomo-taka108.github.io/SnsTimeLineApp/api/)** | **実装から自動生成**したエンドポイント仕様。更新手順は [api/README.md](api/README.md) | すべての実装者 | 自動生成 |
 
 ---
@@ -60,6 +61,7 @@ X/Twitter風SNSアプリ（学習目的）の要件定義ドキュメント一�
 | **ユーザー検索をどう実装するか** | [04_data_model.md](04_data_model.md) 6章、[05_api_design.md](05_api_design.md) #20 |
 | **AWSに載せるとどうなるか** | [10_infrastructure.md](10_infrastructure.md) |
 | **どんなテストを書くべきか** | [11_test_design.md](11_test_design.md)、[06_non_functional.md](06_non_functional.md) 5.3 |
+| **性能を実測したい / 負荷試験を回したい** | [13_performance_test.md](13_performance_test.md)、[perf/README.md](../perf/README.md) |
 
 ---
 
@@ -111,6 +113,7 @@ flowchart TD
 | ユーザー検索の方式・SQL・インデックス | [04_data_model.md](04_data_model.md) 6章 | 03, 05 |
 | AWS構成・インフラ | [10_infrastructure.md](10_infrastructure.md) | 07 |
 | テストケースの設計 | [11_test_design.md](11_test_design.md) | 04, 05, 06 |
+| 負荷試験のツール選定・シナリオ・実測値 | [13_performance_test.md](13_performance_test.md) | 06, 11 |
 
 > **DBのカラムとAPIのフィールドは1対1ではない。** 例えば `isLikedByMe` はAPIにあるがDBにはなく、`password_hash` はDBにあるがAPIには出ない。両者を混同しないこと。
 

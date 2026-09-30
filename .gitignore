@@ -80,6 +80,11 @@ override.tf.json
 # プロバイダ lock は共有するのでコミットする（除外しない）
 !.terraform.lock.hcl
 
+# ===== 負荷試験の出力（docs/13_performance_test.md） =====
+# 実行ごとに変わる測定結果。リポジトリには手順と閾値だけを残す。
+# （*.log と node_modules/ は上で既に除外済みなので、ここには書かない）
+perf/results/
+
 # ===== Maven Wrapper =====
 # Git は「最後にマッチしたパターン」を採用するため、上の *.jar より後に否定を書く。
 # （このプロジェクトの wrapper は distributionType=only-script で jar を持たないが、

@@ -1,0 +1,28 @@
+{
+  // 負荷試験スクリプトの**型検査専用**の設定（docs/13_performance_test.md）。
+  //
+  // k6 は TypeScript を実行できるが、型検査はしない。
+  // 公式ドキュメント: "TypeScript support is partial as it strips the type
+  // information but doesn't provide type safety."
+  // つまり型注釈を剥がすだけなので、検査しないと型がただの飾りになる。
+  // ここで tsc --noEmit を回すことで D-58 の精神（型が合わないテストは
+  // 実装と合っていないテスト）を perf 内部で維持する。
+  //
+  // frontend の tsconfig に混ぜないのは、@types/k6 が frontend のビルドに
+  // 一切不要で、本番ビルド設定に負荷試験の型を混ぜたくないため。
+  // D-58 が vitest/globals を拒否したのと同じ理由。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "types": ["k6"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["scenarios/**/*.ts", "lib/**/*.ts"]
+}

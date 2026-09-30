@@ -1,0 +1,14 @@
+{
+  "name": "snstimeline-perf",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "負荷試験（k6）のスクリプトと型検査。frontend からは独立している",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/k6": "^1.3.1",
+    "typescript": "~6.0.2"
+  }
+}
