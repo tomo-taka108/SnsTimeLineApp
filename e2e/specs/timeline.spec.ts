@@ -36,30 +36,41 @@ test.describe("タイムライン", () => {
 
     // 2ページ目のAPI呼び出し(cursorパラメータ付き)が実際に発火したことを、
     // レスポンスイベントのリスナーで検知する。件数のpollだけに頼ると、
-    // 6ワーカー並列などの高負荷下でIntersectionObserverコールバックの発火が
-    // 描画フレームに間に合わず、タイムアウトまで一度も交差が検知されないことが
-    // 実機検証で判明した(Chrome DevTools MCPでの単体操作では常に成功することも
-    // 確認済み。実装ではなく並列負荷下のタイミングが原因)。
-    //
-    // mouse.wheel は現在位置からの相対移動のため、カード20件分の高さを
-    // 動かすには複数回必要で、回数とピクセル数の見積りがハードコードになる。
-    // window.scrollTo(0, document.body.scrollHeight) で毎回ページ最下部へ
-    // 直接送る方が、ページの実際の高さに追従でき確実（Chrome DevTools MCPの
-    // 単体検証でも scrollTo 方式のみ確実に効いた）
+    // 「rootMarginの境界に届いていないので永遠に増えない」ケースと
+    // 「増えるのを待っているだけ」のケースを区別できない
     let loadMoreFired = false;
     page.on("response", (res) => {
       if (res.url().includes("/posts") && res.url().includes("cursor=")) loadMoreFired = true;
     });
 
+    // 最下部まで直接スクロールするだけでは発火しないことがあった。原因は、
+    // ページロード直後（useInfiniteScroll の observer がまだ observe() されて
+    // いないタイミング）に最下部までスクロールしてしまうと、observer 確立後に
+    // 「既に交差状態」のまま固定され、状態変化が無いために新たなコールバックが
+    // 発火しないこと（IntersectionObserver は状態が変化したときに通知する仕組み）
+    // と判明した（Chrome DevTools MCPで新規observerを張ると isIntersecting:true に
+    // なる一方、scrollTo直後は発火せず、少し待ってからscrollすると発火する実機検証
+    // で確認）。毎回「現在位置と異なる中間位置」を経由してから最下部へ送ることで、
+    // scrollTo(0,0)が既に0付近のときに変化なしと判定される事態を避け、
+    // 確実に「非交差→交差」の状態変化を起こす
+    let attempt = 0;
     await expect
       .poll(
         async () => {
-          if (!loadMoreFired) {
-            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-          }
+          if (loadMoreFired) return true;
+          attempt++;
+          await page.evaluate((n) => {
+            // 試行ごとに異なる中間位置へ飛ぶ（毎回0に戻すとscrollTo(0,0)が
+            // 既に0付近で「変化なし」と扱われることがあるため）
+            const mid = (document.body.scrollHeight / 2) + (n % 3) * 50;
+            window.scrollTo(0, mid);
+          }, attempt);
+          await page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+          });
           return loadMoreFired;
         },
-        { timeout: 20000 },
+        { timeout: 20000, intervals: [500] },
       )
       .toBe(true);
 
