@@ -11,7 +11,11 @@
 #   1. docker compose --profile e2e up -d db-e2e
 #   2. CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4173 \
 #      DB_URL=jdbc:postgresql://localhost:5434/snstimeline_e2e ./mvnw spring-boot:run
-#   3. ./e2e/run-e2e.sh              （通常のE2Eシナリオ）
+#   3. VITE_API_BASE_URL=http://localhost:8081/api/v1 npm run dev
+#      （バックエンドを別ポート(例:8081)で起動した場合は、フロントも同じポートへ
+#        向ける必要がある。frontend/.env.development は :8080 固定のため、
+#        既定ポート(8080)でバックエンドを起動するなら3は不要）
+#   4. ./e2e/run-e2e.sh              （通常のE2Eシナリオ）
 #      ./e2e/run-e2e.sh perf         （ブラウザパフォーマンステスト。本番ビルドが必要）
 #
 # Git Bash（Windows）での実行を想定している。
@@ -142,6 +146,25 @@ if [ "$MODE" = "perf" ]; then
   fi
   echo "OK（${PREVIEW_URL} からのCORSが許可されている）"
 fi
+
+# ---- フロントエンド事前チェック ----------------------------------------------
+#
+# frontend/.env.development は VITE_API_BASE_URL を :8080 固定で持つ。
+# バックエンドを既定(8080)以外のポートで起動した場合、フロントエンドの
+# npm run dev も VITE_API_BASE_URL=... で同じポートに向けて起動し直す必要がある。
+# これを忘れると、テストは「ログインに失敗した」という誤解を招くエラーで
+# 止まり、原因（ポート不一致）の特定に時間がかかる（実機で経験済み）。
+# フロントエンドが生きているかだけは、ここで確認しておく。
+front_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${FRONTEND_URL}/login" 2>/dev/null || echo '000')"
+if [ "$front_status" = "000" ]; then
+  echo "エラー: フロントエンドに接続できない（${FRONTEND_URL}）" >&2
+  echo "  cd frontend && npm run dev を実行すること" >&2
+  exit 1
+fi
+echo "OK（フロントエンド: ${FRONTEND_URL}）"
+warn "バックエンドを既定(8080)以外のポートで起動した場合は、フロントエンドも"
+warn "  VITE_API_BASE_URL=${BASE_URL} npm run dev"
+warn "として同じポートへ向け直すこと（frontend/.env.development は8080固定のため）"
 
 # ---- 前掃除 -----------------------------------------------------------------
 
