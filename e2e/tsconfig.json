@@ -1,0 +1,27 @@
+{
+  // E2Eテストの**型検査専用**の設定（docs/14_e2e_test.md）。
+  //
+  // perf/tsconfig.json と同じ理由で frontend から独立させている:
+  // @playwright/test は frontend のビルドに一切不要で、本番ビルド設定に
+  // テストの型を混ぜたくない（D-58 が vitest/globals を拒否したのと同じ理由）。
+  //
+  // frontend の型（frontend/src/api/types.ts）を import しないのは、
+  // perf と違って技術的には可能だが意図的にしていない。E2Eが検証すべきは
+  // 「フロントが実際に返す形」であり、フロントの型定義を信じてしまうと
+  // 型と実装が同時に間違っていたときに検出できないため（D-75）。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "types": ["node", "@playwright/test"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "results"]
+}
