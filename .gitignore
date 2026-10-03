@@ -85,6 +85,11 @@ override.tf.json
 # （*.log と node_modules/ は上で既に除外済みなので、ここには書かない）
 perf/results/
 
+# ===== E2Eテストの出力（docs/14_e2e_test.md） =====
+# 実行ごとに変わる結果・スクリーンショット・トレース。リポジトリには手順と閾値だけを残す。
+e2e/results/
+e2e/.auth/
+
 # ===== Maven Wrapper =====
 # Git は「最後にマッチしたパターン」を採用するため、上の *.jar より後に否定を書く。
 # （このプロジェクトの wrapper は distributionType=only-script で jar を持たないが、

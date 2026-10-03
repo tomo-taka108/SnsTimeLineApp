@@ -48,6 +48,35 @@ services:
       timeout: 3s
       retries: 10
 
+  # E2Eテスト専用のDB（docs/14_e2e_test.md）。
+  #
+  # db-perf と同じ設計をもう一段。profiles を付けているため、通常の
+  # `docker compose up -d` では起動しない。E2Eテストのときだけ
+  # `docker compose --profile e2e up -d db-e2e` で足す。
+  #
+  # db-perf と違い、シードSQLはマウントしない。E2Eのデータは
+  # 各テストが必要な分だけAPI経由で作る（docs/14_e2e_test.md 3章）。
+  # マウントするのは後片付け用の truncate-all.sql のみ（コピーせず参照する。
+  # テーブルを追加したときに片方が腐るのを防ぐため）。
+  db-e2e:
+    image: postgres:16
+    profiles: ["e2e"]
+    environment:
+      POSTGRES_DB: snstimeline_e2e
+      POSTGRES_USER: snsapp
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata-e2e:/var/lib/postgresql/data
+      - ./backend/src/test/resources/sql:/e2e-sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snsapp -d snstimeline_e2e"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   pgdata:
   pgdata-perf:
+  pgdata-e2e:
