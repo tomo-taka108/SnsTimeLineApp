@@ -1,5 +1,7 @@
 # SnsTimeLineApp（タイムライン型SNSアプリ）
 
+[![CI](https://github.com/tomo-taka108/SnsTimeLineApp/actions/workflows/ci.yml/badge.svg)](https://github.com/tomo-taka108/SnsTimeLineApp/actions/workflows/ci.yml)
+
 X（旧Twitter）のタイムライン形式を参考にした、**学習目的**のSNS風Webアプリケーション。
 短いテキストと画像を投稿し、**いいね**・**コメント**・**フォロー**で相互にやり取りできます。
 
