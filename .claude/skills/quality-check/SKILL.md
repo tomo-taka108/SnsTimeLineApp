@@ -9,6 +9,9 @@ disable-model-invocation: false
 **コミット前に必ず実施すること。** バックエンド（Spring Boot）とフロントエンド（React + Vite）で
 それぞれチェックが必要。
 
+> **同じチェックが CI（`.github/workflows/ci.yml` の `backend` / `frontend` ジョブ）でも PR ごとに走る**（D-77）。
+> CI は最後の安全網であり、ローカルで緑にしてからコミットする手順は変わらない。
+
 > **`backend/`（Spring Boot 4.1.0 / JDK 25 / Maven）と `frontend/`（React 19 / Vite 8 / TypeScript）は実装済み。**
 > すべてのコマンドがそのまま動く。
 >

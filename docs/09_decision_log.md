@@ -1914,6 +1914,43 @@ E2Eでしか検証できない領域を補完する）。D-57の「将来の追�
 
 ---
 
+## D-77 GitHub ActionsでCIを導入し、E2EもPRごとに自動実行する
+
+| 項目 | 内容 |
+|---|---|
+| **日付** | 2026-10-04 |
+| **論点** | 品質チェックとE2Eを、手動運用からCIでの自動実行に移すか。E2Eは任意実行（`workflow_dispatch`）に留めるか |
+| **選択肢** | A. 品質チェックのみ自動、E2Eは`workflow_dispatch` / **B. 品質チェックもE2EもPR・mainへのpushで自動実行** |
+| **決定** | **B**（パフォーマンステストは対象外） |
+| **状態** | 決定済み |
+
+**理由**
+
+- [14_e2e_test.md](14_e2e_test.md) 7章 #5 は「導入時も`workflow_dispatch`が筋」としていたが、
+  その根拠は**ローカルで**毎コミット前に数分かかること（D-69と同じ判断）だった。CIでは
+  開発者の手元を止めないため、この根拠が当てはまらない
+- 公開リポジトリのため、GitHub提供のLinuxランナーは無料で、実行時間の制限もない
+- E2Eは`backend`・`frontend`ジョブの後段に置き、静的解析や単体テストで落ちるコードに
+  数分かけない
+- **ローカルでコミット前にE2Eを必須としない方針は変えない。** quality-checkスキルの位置づけも同じ
+
+**パフォーマンステストを除く理由**: 共有ランナーは他ジョブとCPUを分け合うため、数値が相対比較の
+基準にならない（D-69・D-76の「絶対値を根拠にしない」と同じ考え方）。
+
+**実装上の判断**
+
+- E2E用DBは GitHub の`services:`ではなく、`docker compose --profile e2e`をそのまま使う。
+  掃除処理（`truncateAll`と`run-e2e.sh`の trap）が`docker compose exec db-e2e`を前提としているため
+- `e2e/run-e2e.sh`をそのまま呼び、事前チェックと前後の掃除を二重に持たない
+- `JWT_SECRET`はジョブ内で生成する使い捨ての値とし、`::add-mask::`でログ上は伏せ字にする
+- ヘルスチェック用エンドポイントが未定義のため（[10_infrastructure.md](10_infrastructure.md) 4.1）、
+  起動完了は`POST /auth/login`の応答で判定する
+
+**影響範囲**: `.github/workflows/ci.yml` / `backend/mvnw`・`e2e/run-e2e.sh`（実行権限） /
+[14_e2e_test.md](14_e2e_test.md) 7章 / `quality-check`・`e2e-test` スキル / README
+
+---
+
 ## 未決事項・保留
 
 | ID | 論点 | 状態 | メモ |

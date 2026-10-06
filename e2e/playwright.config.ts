@@ -20,8 +20,8 @@ export default defineConfig({
   globalSetup: "./global-setup.ts",
   outputDir: "./results/test-results",
   fullyParallel: true,
-  // CI が存在しない現状は手動運用（13章 6章 #7 と同じ判断）。retries は
-  // ローカルの一時的なノイズ対策として1回だけ許容する
+  // ローカルでは手動実行、PR では CI（.github/workflows/ci.yml、D-77）で自動実行する。
+  // retries は一時的なノイズ対策として1回だけ許容する（ローカル・CI 共通）
   retries: 1,
   reporter: [
     ["list"],
